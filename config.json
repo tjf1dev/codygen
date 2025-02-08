@@ -1,0 +1,15 @@
+{
+    "guilds": {
+        "10293710239": {
+            "prefix": {
+                "enabled": false
+            }
+        },
+        "1333785291584180244": {
+            "prefix": {
+                "prefix": ">",
+                "prefix_enabled": true
+            }
+        }
+    }
+}
