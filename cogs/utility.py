@@ -1,0 +1,22 @@
+from main import *
+
+class utility(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.description = "tools that can be helpful sometimes!"
+        
+    
+    @commands.hybrid_group(name="utility",description="tools that can be helpful sometimes!")
+    async def utility(self,ctx):
+        pass
+    @utility.command(name="pfp", description="Get someones pfp")
+    async def pfp(self,ctx, user: discord.User=None):
+        if user == None:
+            user = ctx.author
+        avatar = user.avatar.url
+        embed = discord.Embed(color=0x8ff0a4)
+        embed.set_image(url=avatar)
+        await ctx.reply(embed=embed)
+
+async def setup(bot):
+    await bot.add_cog(utility(bot))

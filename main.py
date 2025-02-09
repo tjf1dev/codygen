@@ -1,15 +1,40 @@
+#
+#
+#
+#                        █████                                        
+#                       ░░███                                         
+#   ██████   ██████   ███████  █████ ████  ███████  ██████  ████████  
+#  ███░░███ ███░░███ ███░░███ ░░███ ░███  ███░░███ ███░░███░░███░░███ 
+# ░███ ░░░ ░███ ░███░███ ░███  ░███ ░███ ░███ ░███░███████  ░███ ░███ 
+# ░███  ███░███ ░███░███ ░███  ░███ ░███ ░███ ░███░███░░░   ░███ ░███ 
+# ░░██████ ░░██████ ░░████████ ░░███████ ░░███████░░██████  ████ █████
+#  ░░░░░░   ░░░░░░   ░░░░░░░░   ░░░░░███  ░░░░░███ ░░░░░░  ░░░░ ░░░░░ 
+#                               ███ ░███  ███ ░███                    
+#                              ░░██████  ░░██████                     
+#                               ░░░░░░    ░░░░░░                      
+#
+#
+#
+# 
+# codygen - a bot that does actually everything :sob:
 # written by a random gay fox and the cutest proot ever
-# awwwww :33 ~proot
-
+#
+#
+# "I love tjf1"
+# - cody, 9/2/2025
+#
 # our links
-# tjf1: https://github.com/tjf1dev
+# tjf1 (the cutest proot): https://github.com/tjf1dev
 # cody: https://github.com/theridev
-
+#
 # feel free to read this terrible code, we are not responsible for any brain damage caused by this.
 
-import discord, os,dotenv,random,json,time
+# importing the modules
+import discord, os,dotenv, random, json, time, csv
 from discord.ext import commands
-from colorama import Fore
+from discord import app_commands
+from colorama import Fore # this module is so fore!!!
+
 
 # pre-init functions
 def get_prefix(bot=None, message=None):
@@ -24,36 +49,130 @@ def get_prefix(bot=None, message=None):
 
     except Exception as e:
         return ">"
-# definitions
 
-activity = discord.Activity(type=discord.ActivityType.watching, name="silly people :3")
-client = commands.Bot(command_prefix=get_prefix,intents=discord.Intents.all(), status=discord.Status.online, activity=activity, help_command=None)
-tree = client.tree
-dotenv.load_dotenv()
-TOKEN = os.getenv("BOT_TOKEN")
-GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
+def get_guild_config(guild_id):
+    with open("config.json","r") as f:
+        data = json.load(f)
+        guild = data["guilds"][str(guild_id)]
+        return guild
+    
+def get_value_from_guild_config(guild_id, key):
+    with open("config.json","r") as f:
+        data = json.load(f)
+        guild = data["guilds"][str(guild_id)]
+        return guild[key]
+    
+def set_value_from_guild_config(guild_id, key, value):
+    with open("config.json","r") as f:
+        data = json.load(f)
+        guild = data["guilds"][str(guild_id)]
+        guild[key] = value
+    with open("config.json","w") as f:
+        json.dump(data,f,indent=4)
+
+def get_config_defaults(type="guild"):
+    with open("config.json","r") as f:
+        data = json.load(f)
+        if type == "guild":
+            return data["template"]["guild"]
+    return None
+
+# load configs
+
+try:
+    with open("config.json","r") as f:
+        data = json.load(f)
+except Exception as e:
+    print(f"{Fore.LIGHTRED_EX}could not find config{Fore.RESET}")
+    pass
+
+
 
 # command configs
+words = data["commands"]["awawawa"]["words"]
+version = data["version"]
 
-# words used for /awawawa
-words = ["awawawawawawa",":3","uwu","owo",">~<"]
+# bot definitions
+
+activity = discord.Activity(type=discord.ActivityType.watching, name=f"version {version}")
+client = commands.Bot(
+    command_prefix=get_prefix,
+    intents=discord.Intents.all(),
+    status=discord.Status.online,
+    activity=activity,
+    help_command=None
+)
+tree = client.tree
+
+# load env
+dotenv.load_dotenv()
+TOKEN = os.getenv("BOT_TOKEN") # bot token
+GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
 
 # events
 
+def verify():
+    async def predicate(ctx):
+        try:
+            with open("../config.json","r") as f:
+                data = json.load(f)
+                guild = data["guilds"][str(ctx.guild.id)]
+                prefix_enabled = guild["prefix_enabled"]
+        except Exception as e:
+            prefix_enabled = "true"
+        if ctx.interaction is not None:
+            return True
+        if prefix_enabled == "false":
+            print("prefixed commands are disabled.")
+            return False
+        if prefix_enabled == "true":
+            print("prefixed commands are enabled.")
+            return True
+        
+        return False 
+    return commands.check(predicate)
+# cody: last seen at line 134
+# im alive, silly. - cody
+# nope, you arent :c
+# run bot or smth idk
+
+        
 @client.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CheckFailure):
-        return  # Silently ignore check failures
-    await ctx.send(f"An error occurred: {error}")  # Handle other errors normally
+        return 
+    
+    elif isinstance(error, commands.CommandNotFound):
+        return
+    else:
+        e = discord.Embed(
+            title="an error occurred while trying to run this command",
+            description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen)",
+            color=0xff0000
+        ).add_field(
+            name="error",
+            value=f"```{error}```"
+        ).add_field(
+            name="command",
+            value=f"```{ctx.command.name}```", inline=False
+        ).add_field(
+            name="version",
+            value=f"```{version}```", inline=True
+        )
+        await ctx.send(embed=e)  # Handle other errors normally
 
 @client.event
 async def on_ready():
-    print(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
+    for filename in os.listdir("cogs"):
+        if filename.endswith(".py"):
+            print(f"[ {Fore.GREEN}OK{Fore.RESET} ] Loading {Fore.BLUE}{filename}{Fore.RESET}") # fuckin
+            await client.load_extension(f"cogs.{filename[:-3]}") # do you need await for this??? yes you do
+    print(f"[ {Fore.GREEN}OK{Fore.RESET} ] bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
 @client.event
 async def on_message(message):
     if message.author.bot:
         return
-    if client.user.mentioned_in(message):
+    if message.content == f"<@!{client.user.id}>":
         e = discord.Embed(
             title=f"{client.user.name}",
             description=f"my prefix for this server is: `{get_prefix(message=message)}`, or you can use slash commands!",
@@ -61,43 +180,23 @@ async def on_message(message):
         )
         await message.reply(embed=e)
     await client.process_commands(message)
-def verify():
-    async def predicate(ctx):
-        try:
-            with open("config.json","r") as f:
-                data = json.load(f)
-                guild = data["guilds"][str(ctx.guild.id)]
-                prefix_enabled = guild["prefix"]["prefix_enabled"]
-        except Exception as e:
-            prefix_enabled = True
-        if ctx.interaction is not None:
-            return True
-        if prefix_enabled == False:
-            return False
-        return True 
-    return commands.check(predicate)
-
-
 @verify()
-@client.hybrid_command(name="ping", description="shows the bot latency and other stuff idk lol")
+@client.hybrid_command(name="ping", description="shows the bot latency and other stuff idk lol") # can you write a better description? - cody / no i cant - tjf1
 async def ping(ctx):
     e = discord.Embed(
         title="codygen",
-        description=f"hii :3 bot made by `tjf1` and `codydafoxie`",
+        description=f"hii :3 bot made by `tjf1` and `codydafoxie`", # im the second one
         color=0xff00ff
     )
     e.add_field(
         name="commands",
-        value=f"`serving {len(tree.get_commands())} commands`",
+        value=f"`serving {len(commands.tree.get_commands())} commands`",
     )
     await ctx.reply(embed=e, ephemeral=True, mention_author=False)
-@client.hybrid_command(name="help", description="shows the bot latency and other stuff idk lol")
-async def help_command(ctx):
-    await ctx.reply("do you really think we were gonna make a real help command? yes, we will. soon")
 @verify()
 @commands.is_owner()
 @client.hybrid_command(name="sync",description="syncs app commands")
-async def sync(ctx, *, flags=None):
+async def sync(ctx, *, flags=None): 
     if flags == "-g":
         success = discord.Embed(
             title=f"successfully synced {len(tree.get_commands())} commands for all guilds!",
@@ -112,151 +211,69 @@ async def sync(ctx, *, flags=None):
         await tree.sync(guild=await client.fetch_guild(1333785291584180244))
 
     await ctx.reply(embed=success,ephemeral=True,mention_author=False)
-@verify()
-@tree.command(name="test",description="test command")
-async def test(interaction: discord.Interaction):
-    await interaction.reply.send_message("test command",ephemeral=True)
+        
+class HelpSelect(discord.ui.Select):
+    def __init__(self, bot):
+        options = []
+        bot = client
+        if bot.cogs:
+            for cog_name, cog in bot.cogs.items():
+                description = getattr(cog, "description", "No description available.")
+                options.append(discord.SelectOption(label=cog_name, description=description))
+        else:
+            # Add a fallback option if no cogs are loaded
+            options.append(discord.SelectOption(label="No Modules Loaded", description="Failed to load module list."))
 
-@verify()
-@client.hybrid_command(name="viewbanned", description="View banned people.")
-async def viewbanned(ctx):
-    if ctx.author.guild_permissions.ban_members and ctx.author != None:
-        bans = [entry async for entry in ctx.guild.bans()]
-        e = discord.Embed(
-            title=f"banned people in {ctx.guild.name}",
-            color=0xff0000
+        super().__init__(placeholder="Select a cog", max_values=1, min_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title=f"codygen - {self.values[0]}",
+            color=0xffffff
         )
-        if len(bans) == 0:
-            e.description = "no one is banned in this server"
-        for ban in bans:
-            e.add_field( # cody: last seen at line 134
-                name=f"{ban.user}",
-                value=f"reason: {ban.reason}",
-                inline=False
+        cog = client.get_cog(self.values[0])
+        if cog == None:
+            fail = discord.Embed(
+                title="failed to load :broken_heart:",
+                description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
+                color=0xff0000
+            )
+            await interaction.response.edit_message(embed=fail)
+            return
+        elif len(cog.get_commands()) == 0:
+            fail = discord.Embed(
+                title="its quiet here...",
+                description=f"cogs.{self.values[0]} doesnt have any commands.",
+                color=0xff0000
+            )
+            await interaction.response.edit_message(embed=fail)
+        else:
+            for command in cog.walk_commands():
+                embed.add_field(
+                    name=command.name,
+                    value=f"```{command.description}```",
+                    inline=False
                 )
-        
-        await ctx.reply(embed=e)      
-    else:
-        await ctx.reply("you dont have permission to do this",ephemeral=True)
+            await interaction.response.edit_message(embed=embed,view=HelpHomeView(client))
+class HelpWiki(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Documentation", style=discord.ButtonStyle.link, url="https://github.com/tjf1dev/codygen/wiki")
+class HelpHomeView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__()
+        self.add_item(HelpSelect(bot))
+        self.add_item(HelpWiki())
+@client.hybrid_command(
+    name="help",
+    description="shows useful info about the bot."
+)
+async def help_command(ctx):
+    embed = discord.Embed(
+        title="codygen",
+        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menus below to search for commands and their usages.",
+        color=0xffffff
+    )
+    await ctx.reply(embed=embed, view=HelpHomeView(client))
 
-@verify()
-@client.hybrid_command(name="awawawa",description="awawawawawawa")
-async def awawawa(ctx):
-    await ctx.reply(random.choice(words),ephemeral=True)
-
-@verify()
-@client.hybrid_command(name="randomword", description="get random word from english dictionary")
-async def randomword(ctx):
-    with open("words.txt", "r") as file:
-        text = file.read()
-        words = list(map(str, text.split()))
-        await ctx.reply(random.choice(words))
-
-@verify()
-@client.hybrid_command(name="cute",description="cute command")
-async def cute(ctx, user: discord.User=None):
-    if user:
-        await ctx.reply(f"{user.mention} is cute and silly :3")
-    else:  
-        await ctx.reply("you are cute and silly :3",ephemeral=True)
-
-@verify()
-@client.hybrid_command(name="wokemeter",description="see how WOKE someone is!")
-async def wokemeter(ctx, user: discord.User=None):
-    if user.id == 1266572586528280668:
-        await ctx.reply(f"{user.mention} is 101% woke")
-    if user == None:
-        user = ctx.author
-    if user.bot == True:
-        await ctx.reply(f"bots cant be woke :broken_heart:")
-    else:
-        await ctx.reply(f"{user.mention} is {random.randint(80,100)}% woke")
-
-@verify()
-@client.hybrid_command(name="ship", description="SHIP TWO PEOPEL")
-async def ship(ctx, user1: discord.User=None, user2: discord.User=None):
-    if user2 == None:
-        user2 = ctx.author
-    if user1.id in [978596696156147754,1277351272147582990] and user2.id in [978596696156147754,1277351272147582990]:
-        await ctx.reply(f"ship between {user1.mention} and {user2.mention} is ??? its too high idk")
-    elif user1 == user2:
-        await ctx.reply("awwwwwe you need love yourself :3 100%")
-    else:
-        await ctx.reply(f"ship between {user1.mention} and {user2.mention} is {random.randint(0,100)}%")
-        
-@verify()
-@client.hybrid_command(name="whosthecutest", description="who is the cutest")
-async def whosthecutest(ctx):
-    await ctx.reply(r"<@978596696156147754>")
-
-@client.hybrid_command(name="pfp", description="Get someones pfp")
-async def pfp(ctx, user: discord.User=None):
-    if user == None:
-        user = ctx.author
-    avatar = user.avatar.url
-    embed = discord.Embed(color=0x8ff0a4)
-    embed.set_image(url=avatar)
-    await ctx.reply(embed=embed)
-
-@client.hybrid_group(name="settings", description="settings command")
-async def settings(ctx):
-    pass
-
-@commands.is_owner()
-@settings.command(name="toggle_prefix", description="toggle if prefixed commands are enabled in this guild. -e to enable, -d to disable")
-async def toggle_prefix(ctx, *, flags=None):
-        if flags == "-e":
-            with open("config.json","r") as f:
-                data = json.load(f)
-                guild = data["guilds"][str(ctx.guild.id)]
-                guild["prefix"]["prefix_enabled"] = True
-            with open("config.json","w") as f:
-                json.dump(data,f,indent=4)
-            await ctx.reply("prefixed commands have been enabled for this server!",ephemeral=True)
-        if flags == "-d":
-            with open("config.json","r") as f:
-                data = json.load(f)
-                guild = data["guilds"][str(ctx.guild.id)]
-                guild["prefix"]["prefix_enabled"] = False
-            with open("config.json","w") as f:
-                json.dump(data,f,indent=4)
-            await ctx.reply("prefixed commands have been disabled for this server!",ephemeral=True)
-            
-@commands.is_owner()
-@settings.command(name="set_prefix", description="change the prefix for this guild. wont work if prefixed commands are disabled. set flag to your new prefix.")
-async def set_prefix(ctx, *, flags=None):
-        with open("config.json","r") as f:
-            data = json.load(f)
-            guild = data["guilds"][str(ctx.guild.id)]
-            guild["prefix"]["prefix"] = flags
-        with open("config.json","w") as f:
-            json.dump(data,f,indent=4)
-        await ctx.reply(f"the prefix for this server has been set to `{flags}`!",ephemeral=True)
-        
-@commands.is_owner()
-@settings.command(name="regen_config", description="regenerates the config for current guild.")
-# use -g flag for global. DEFENITELY NOT RECOMMENDED WIPES EVERY CONFIG PLEASE DONT
-async def regen_config(ctx, *, flags=None):
-    if flags == f"-g {GLOBAL_REGEN_PASSWORD}":
-        await ctx.reply("regenerating global config. please note that this is not recommended. change the password in the .env file after the regen is done.")
-        time.sleep(5)
-        await ctx.reply("finished regen")
-    try:
-        if flags != None:
-
-            if flags.startswith("-g"):
-                await ctx.reply("invalid password, maybe it was changed?")
-    except Exception as e:
-        pass
-    else:
-        with open("config.json","r") as f:
-            data = json.load(f)
-            guilds = data["guilds"]
-            guilds[str(ctx.guild.id)] = {"prefix":{"prefix":">","prefix_enabled":True}}
-        with open("config.json","w") as f:
-            json.dump(data,f,indent=4)
-            
-        await ctx.reply(f"config for {ctx.guild.name} regenerated successfully")
-# run bot or smth idk
-client.run(TOKEN)
-
+if __name__ == "__main__":
+    client.run(TOKEN)
