@@ -6,3 +6,4 @@
 
 ## contributions
 > feel free to contribute to the bot owo
+https://readme-contribs.as93.net/contributors/tjf1dev/codygen
