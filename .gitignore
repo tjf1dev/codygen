@@ -1,4 +1,6 @@
 .env
-config.json
+stats/stats.json
+stats.json
 __pycache__
 config.json
+data/*

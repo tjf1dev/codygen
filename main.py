@@ -30,7 +30,7 @@
 # feel free to read this terrible code, we are not responsible for any brain damage caused by this.
 
 # importing the modules
-import discord, os,dotenv, random, json, time, csv
+import discord, os,dotenv, random, json, time, csv, psutil, datetime
 from discord.ext import commands
 from discord import app_commands
 from colorama import Fore # this module is so fore!!!
@@ -51,24 +51,30 @@ def get_prefix(bot=None, message=None):
         return ">"
 
 def get_guild_config(guild_id):
-    with open("config.json","r") as f:
-        data = json.load(f)
-        guild = data["guilds"][str(guild_id)]
-        return guild
+    try:
+        with open(f"data/guilds/{guild_id}.json","r") as f:
+            guild = json.load(f)
+            return guild
+    except FileNotFoundError:
+        return None
     
 def get_value_from_guild_config(guild_id, key):
-    with open("config.json","r") as f:
-        data = json.load(f)
-        guild = data["guilds"][str(guild_id)]
-        return guild[key]
-    
+    try:
+        with open(f"data/guilds/{guild_id}.json", "r") as f:
+            data = json.load(f)
+            return data.get(key, None)
+    except FileNotFoundError:
+        return None
 def set_value_from_guild_config(guild_id, key, value):
-    with open("config.json","r") as f:
-        data = json.load(f)
-        guild = data["guilds"][str(guild_id)]
-        guild[key] = value
-    with open("config.json","w") as f:
-        json.dump(data,f,indent=4)
+    try:
+        with open(f"data/guilds/{guild_id}.json", "r") as f:
+            data = json.load(f)
+            data[key] = value
+        with open(f"data/guilds/{guild_id}.json", "w") as f:
+            json.dump(data, f, indent=4)
+        return True
+    except FileNotFoundError:
+        return False
 
 def get_config_defaults(type="guild"):
     with open("config.json","r") as f:
@@ -113,24 +119,20 @@ GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
 
 def verify():
     async def predicate(ctx):
-        try:
-            with open("../config.json","r") as f:
-                data = json.load(f)
-                guild = data["guilds"][str(ctx.guild.id)]
-                prefix_enabled = guild["prefix_enabled"]
-        except Exception as e:
-            prefix_enabled = "true"
+        prefix_enabled = get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
+        if prefix_enabled == None:
+            prefix_enabled == False
         if ctx.interaction is not None:
             return True
-        if prefix_enabled == "false":
-            print("prefixed commands are disabled.")
-            return False
-        if prefix_enabled == "true":
-            print("prefixed commands are enabled.")
-            return True
-        
-        return False 
+        return prefix_enabled
     return commands.check(predicate)
+def verify_alt(guild_id,interaction):
+        prefix_enabled = get_guild_config(guild_id)["prefix"]["prefix_enabled"]
+        if prefix_enabled == None:
+            prefix_enabled == False
+        if interaction is not None:
+            return True
+        return prefix_enabled
 # cody: last seen at line 134
 # im alive, silly. - cody
 # nope, you arent :c
@@ -163,6 +165,7 @@ async def on_command_error(ctx, error):
 
 @client.event
 async def on_ready():
+    client.start_time = time.time()
     for filename in os.listdir("cogs"):
         if filename.endswith(".py"):
             print(f"[ {Fore.GREEN}OK{Fore.RESET} ] Loading {Fore.BLUE}{filename}{Fore.RESET}") # fuckin
@@ -172,27 +175,79 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
-    if message.content == f"<@!{client.user.id}>":
-        e = discord.Embed(
-            title=f"{client.user.name}",
-            description=f"my prefix for this server is: `{get_prefix(message=message)}`, or you can use slash commands!",
-            color=0xff00ff
-        )
+    if message.content == f"<@{client.user.id}>":
+        if verify_alt(message.guild.id,message.interaction) != True:
+            e = discord.Embed(
+                title=f"hi! im codygen :3",
+                description=f"### try using </help:1338168344506925108>! prefixed commands are disabled in this server.",
+                color=0xff00ff
+            )
+        else:
+            e = discord.Embed(
+                title=f"hi! im codygen :3",
+                description=f"### try using </help:1338168344506925108>! the prefix for this server is: `{get_guild_config(message.guild.id)["prefix"]["prefix"]}`",
+                color=0xff00ff
+            )
         await message.reply(embed=e)
     await client.process_commands(message)
 @verify()
-@client.hybrid_command(name="ping", description="shows the bot latency and other stuff idk lol") # can you write a better description? - cody / no i cant - tjf1
+@client.hybrid_command(name="ping", description="shows how well is codygen doing!") # can you write a better description? - cody / no i cant - tjf1
 async def ping(ctx):
     e = discord.Embed(
         title="codygen",
-        description=f"hii :3 bot made by `tjf1` and `codydafoxie`", # im the second one
+        description=f"### hii :3 bot made by `codydafoxie`, `tjf1`\nuse </help:1338168344506925108> for more info", # im the second one | nope your the first one :3
         color=0xff00ff
     )
     e.add_field(
-        name="commands",
-        value=f"`serving {len(commands.tree.get_commands())} commands`",
+        name="Ping",
+        value=f"`{round(client.latency * 1000)} ms`",
+        inline=True
     )
-    await ctx.reply(embed=e, ephemeral=True, mention_author=False)
+    current_time = time.time()
+    difference = int(round(current_time - client.start_time))
+    uptime = str(datetime.timedelta(seconds=difference))
+    e.add_field(
+        name="Uptime",
+        value=f"`{uptime}`",
+        inline=True
+    )
+    process = psutil.Process(os.getpid())
+    ram_usage = process.memory_info().rss / 1024 ** 2
+    total_memory = psutil.virtual_memory().total / 1024 ** 2
+    e.add_field(
+        name="RAM Usage",
+        value=f"`{ram_usage:.2f} MB / {total_memory:.2f} MB`",
+        inline=True
+    )
+    cpu_usage = psutil.cpu_percent(interval=1)
+    e.add_field(
+        name="CPU Usage",
+        value=f"`{cpu_usage}%`",
+        inline=True
+    )
+    # nerdy ahh logic
+    commands_list = [command.name for command in client.commands if not isinstance(command, commands.Group)] + [
+        command.name for command in client.tree.walk_commands() if not isinstance(command, commands.Group)
+    ]
+
+    for cog in client.cogs.values():
+        for command in cog.get_commands():
+            if not isinstance(command, commands.Group): 
+                commands_list.append(command.name)
+
+    for command in client.walk_commands():
+        if not isinstance(command, commands.Group): 
+            commands_list.append(command.name)
+        else:
+            for subcommand in command.walk_commands():
+                commands_list.append(subcommand.name)
+
+    e.add_field(
+        name="commands",
+        value=f"`serving {len(set(commands_list))} commands`",
+    )
+    await ctx.reply(embed=e,ephemeral=True)
+
 @verify()
 @commands.is_owner()
 @client.hybrid_command(name="sync",description="syncs app commands")
@@ -270,10 +325,10 @@ class HelpHomeView(discord.ui.View):
 async def help_command(ctx):
     embed = discord.Embed(
         title="codygen",
-        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menus below to search for commands and their usages.",
+        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menus below to search for commands and their usages.", # teap
         color=0xffffff
     )
-    await ctx.reply(embed=embed, view=HelpHomeView(client))
+    await ctx.reply(embed=embed, view=HelpHomeView(client),ephemeral=True)
 
 if __name__ == "__main__":
     client.run(TOKEN)
