@@ -10,18 +10,40 @@ class fun(commands.Cog):
     @commands.hybrid_group(name="fun", description="fun commands!", invoke_without_command=True)
     async def fun_group(self, ctx):
         pass
-
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info(f"{self.__class__.__name__}: loaded.")
     @verify()
     @fun_group.command(name="ship", description="SHIP TWO PEOPLE")
     async def ship(self, ctx, user1: discord.User = None, user2: discord.User = None):
         if user2 is None:
             user2 = ctx.author
+        name1 = user1.name
+        name2 = user2.name
+        shipname = name1[:2] + name2[-2:]
         if user1.id in [978596696156147754, 1277351272147582990] and user2.id in [978596696156147754, 1277351272147582990]:
-            await ctx.reply(f"ship between {user1.mention} and {user2.mention} is ??? its too high idk")
+            embed=discord.Embed(
+                title=f"ship",
+                description=f"ship between {user1.mention} and {user2.mention} is ??? way too high idk",
+                color=0xf53d82
+            )
+            embed.set_footer(
+                text=f"name of this ship is {shipname}"
+            )
+            await ctx.reply(embed=embed)
         elif user1 == user2:
-            await ctx.reply("awwwwwe you need love yourself :3 100%")
+            embed=discord.Embed(
+                title=f"ship",
+                description=f"ship between {user1.mention} and {user2.mention} is ??? way too high idk",
+                color=0xf53d82
+                )
+            embed.set_footer(text=f"name of this ship is {shipname}")
+            await ctx.reply(embed=embed)
         else:
-            await ctx.reply(f"ship between {user1.mention} and {user2.mention} is {random.randint(0, 100)}%")
+            embed=discord.Embed(
+                title=f"ship",description=f"ship between {user1.mention} and {user2.mention} is {random.randint(0,100)}%",color=0xf53d82)
+            await ctx.reply(embed=embed)
+            
 
     @verify()
     @fun_group.command(name="awawawa", description="awawawawawawa")
@@ -31,7 +53,7 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="randomword", description="get random word from english dictionary")
     async def randomword(self, ctx):
-        with open("words.txt", "r") as file:
+        with open("assets/randomword.txt", "r") as file:
             text = file.read()
             words = list(map(str, text.split()))
             await ctx.reply(random.choice(words))
@@ -47,7 +69,9 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="wokemeter", description="see how WOKE someone is!")
     async def wokemeter(self, ctx, user: discord.User = None):
-        woke_min = get_value_from_guild_config(ctx.guild.id, "woke_min")
+        config = get_guild_config(ctx.guild.id)["commands"]["wokemeter"]
+        woke_min = config["woke_min"]
+        woke_max = config["woke_max"]
         woke_max = get_value_from_guild_config(ctx.guild.id, "woke_max")
         if user is None:
             user = ctx.author
@@ -66,7 +90,7 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="wokegame", description="Check is the game woke!")
     async def wokegame(self,ctx, game:str):
-        with open('data.csv', mode='r', encoding="utf-8") as wokelist:    
+        with open('assets/wokegames.csv', mode='r', encoding="utf-8") as wokelist:    
             csvFile = csv.DictReader(wokelist)
             color = 0x0000
             game_lower = game.lower()
@@ -107,7 +131,18 @@ class fun(commands.Cog):
         global guessUser
         global guessUserDisplay
         users = ctx.guild.members  # Lista wszystkich uczestników serwera
-        user = random.choice(users) # Wybierz losowego użytkownika. Boty - niestety - też sie liczą. Do naprawienia...?
+        
+        try:
+            async with asyncio.timeout(5):
+                while True:
+                    user = random.choice(users)
+                    if not user.bot:
+                        break
+        except asyncio.TimeoutError:
+            e = discord.Embed(
+                title="sorry, we couldn't find a user to guess :broken_heart:",
+                color=0xff0000
+            )
         guessUser = user.name # Nazwa użytkownika
         guessUserDisplay = user.display_name # Nazwa wyświetlana
         pfp = user.avatar.url  # URL awataru, do zgadywanki.
@@ -121,7 +156,7 @@ class fun(commands.Cog):
     
     @verify()
     @fun_group.command(name="guessrank", description="Check how many times have you guessed!")
-    async def rank(self,ctx):
+    async def guessrank(self,ctx):
         invoker = ctx.author
         invokerName = ctx.author.name
 
@@ -160,7 +195,18 @@ class fun(commands.Cog):
             embed.add_field(name=f"{x}. {user}", value=f"Guessed {value} {raz}.")
         
         await ctx.send(embed=embed)
-            
+
+    @verify() 
+    @fun_group.command(name="cat",description="get a random pic of a cat :3") 
+    async def cat(self,ctx):
+        url = get_global_config()["commands"]["cat"]["url"]
+        req = requests.get(url)
+        e = discord.Embed(
+            title=":3",
+            color=0xffffff
+        )
+        e.set_image(url=req.json()[0]["url"])
+        await ctx.reply(embed=e)
                 
 # Guziki dla komendy zgaduj.
 class guessButtons(discord.ui.View):

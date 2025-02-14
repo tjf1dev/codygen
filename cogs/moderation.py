@@ -8,7 +8,9 @@ class moderation(commands.Cog):
     @commands.hybrid_group(name="moderation",description="commands to help you manage your community.")
     async def moderation(self,ctx):
         pass
-    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info(f"{self.__class__.__name__}: loaded.")
     @verify()
     @moderation.command(name="viewbanned", description="View banned people.")
     async def viewbanned(self,ctx):

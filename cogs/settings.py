@@ -1,6 +1,42 @@
 from main import *
 import json
+import os
+import discord
+from discord.ext import commands
 
+class EditConfigModal(discord.ui.Modal):
+    def __init__(self, config):
+        super().__init__(title="Edit Configuration")
+        self.config = config
+        for key, value in config.items():
+            full_path = f"{self.config['path']}.{key}" if 'path' in self.config else f"./{key}"
+            self.add_item(discord.ui.InputText(
+                label=full_path,
+                value=str(value),
+                custom_id=full_path
+            ))
+        self.key = key
+        self.value = value
+        self.add_item(discord.ui.InputText(
+            label=f"{key}",
+            value=str(value),
+            custom_id="new_value"
+        ))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        new_value = self.children[0].value  # Get user input
+        await interaction.response.send_message(f"`{self.key}` > `{new_value}`", ephemeral=True)
+
+class InitConfigView(discord.ui.View):
+    def __init__(self, config, interaction):
+        super().__init__()
+        self.config = config
+        self.interaction = interaction
+
+    @discord.ui.button(label="edit configuration", style=discord.ButtonStyle.blurple, custom_id="edit_config_button")
+    async def edit_config_button_callback(self, interaction: discord.Interaction):
+        modal = EditConfigModal(self.config)
+        await interaction.response.send_modal(modal)
 class InitHomeView(discord.ui.View):
     def __init__(self):
         super().__init__()
@@ -10,20 +46,21 @@ class InitHomeView(discord.ui.View):
         # Check if the user has Administrator permissions
         if not interaction.user.guild_permissions.administrator:
             error_embed = discord.Embed(
-                title="access denied",
-                description="### you must have admin to run this, silly!",
+                title="Access Denied",
+                description="### You must have admin to run this, silly!",
                 color=0xff0000
             )
             await interaction.response.send_message(embed=error_embed, ephemeral=True)
             return
+
         stage1 = discord.Embed(
-            title="initialization in progress... hang on!",
-            description="this message will update once its done :3",
+            title="Initialization in Progress... Hang on!",
+            description="This message will update once it's done :3",
             color=0xff0000
         )
         await interaction.response.send_message(embed=stage1, ephemeral=True)
-        
-        # check perms
+
+        # Check bot permissions
         guild = interaction.guild
         bot_member = guild.me
 
@@ -43,90 +80,81 @@ class InitHomeView(discord.ui.View):
             add_reactions=True
         )
 
-        if not bot_member.guild_permissions >= required_permissions:
+        if not bot_member.guild_permissions.is_superset(required_permissions):
             missing_perms = [perm for perm, value in required_permissions if not getattr(bot_member.guild_permissions, perm)]
             error_embed = discord.Embed(
-                title="init failed: missing permissions",
-                description=f"### missing the following permissions: `{', '.join(missing_perms)}`\nplease fix the permissions, and try again!",
+                title="Init Failed: Missing Permissions",
+                description=f"### Missing the following permissions: `{', '.join(missing_perms)}`\nPlease fix the permissions and try again!",
                 color=0xff0000
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             return
 
+        # Initialize or check existing guild config
         guild_config_path = f'data/guilds/{guild.id}.json'
-        if os.path.exists(guild_config_path):
-            configAlreadyMade = True
-        else:
+        configAlreadyMade = os.path.exists(guild_config_path)
+
+        if not configAlreadyMade:
             with open('config.json', 'r') as f:
                 template_config = json.load(f)['template']['guild']
                 os.makedirs(os.path.dirname(guild_config_path), exist_ok=True)
                 with open(guild_config_path, 'w') as f:
                     json.dump(template_config, f, indent=4)
-                    configAlreadyMade = False
 
         stage2 = discord.Embed(
-            title="initialization finished!",
-            description="no errors found",
+            title="Initialization Finished!",
+            description="No errors found",
             color=0x00ff00
         )
-        if not configAlreadyMade:
-            stage2.add_field(
-                name="tests passed",
-                value="permissions\n> the bot has sufficient permissions to work!\nconfig\n> a [configuration file](https://github.com/tjf1dev/codygen/wiki/Config) has been created for your guild!"
-            )
-        else:
-            stage2.add_field(
-                name="tests passed",
-                value="permissions\n> the bot has sufficient permissions to work!\nconfig\n> a configuration file already exists for your guild!"
-            )
+        stage2.add_field(
+            name="Tests Passed",
+            value="Permissions\n> The bot has sufficient permissions to work!\n"
+                  f"Config\n> {'A configuration file already exists' if configAlreadyMade else 'A [configuration file](https://github.com/tjf1dev/codygen/wiki/Config) has been created for your guild!'}"
+        )
+
         await interaction.followup.send(embed=stage2, ephemeral=True)
-class settings(commands.Cog):
+
+class Settings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description="settings commands to manage your bot instance."
+        self.description = "Settings commands to manage your bot instance."
 
-    @commands.hybrid_group(name="settings", description="settings commands to manage your bot instance.")
-    async def settings(self,ctx):
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info(f"{self.__class__.__name__}: loaded.")
+
+    @commands.hybrid_group(name="settings", description="Settings commands to manage your bot instance.")
+    async def settings(self, ctx):
         pass
 
     @commands.has_guild_permissions(administrator=True)
-    @settings.command(name="config",description="change the configs for your guild. usage: settings config <key> <value>")
-    async def config(self,ctx, key, value):
-        set_value_from_guild_config(ctx.guild.id, key, value)
-        e = discord.Embed(
-            title="config changed successfully",
-            color=0x00ff00
-        ).add_field(
-            name=f"{key}",
-            value=f"```{value}```"
+    @settings.command(name="config", description="Change the configs for your guild. Usage: settings config <key> <value>")
+    async def config(self, ctx):
+        config = get_guild_config(ctx.guild.id)
+        path = f"data/guilds/{ctx.guild.id}.json"
+
+        # Remove the "level" object from the config
+        config_patched = {k: v for k, v in config.items() if k != "level"}
+        formatted_config = json.dumps(config_patched, indent=4)
+
+        embed = discord.Embed(
+            title="Configure Codygen",
+            description=f"Path to your config file: `{path}`\nCurrent config: ```json\n{formatted_config}```\n## Use the navigation menu below to change your config",
+            color=0xf1f1f1
         )
-        await ctx.reply(embed=e)
+        await ctx.reply(embed=embed, ephemeral=True,view=InitConfigView(config,ctx.interaction))
 
     @commands.has_guild_permissions(administrator=True)
-    @settings.command(name="viewconfig",description="view the configs for your guild.")
-    async def viewconfig(self,ctx):
-        e = discord.Embed(
-            title=f"config for {ctx.guild.name}",
-            color=0x00ff00
-        )
-        for key in get_guild_config(ctx.guild.id):
-            e.add_field(
-                name=f"{key}",
-                value=f"```json\n{get_value_from_guild_config(ctx.guild.id, key)}```",inline=False
-            )
-        await ctx.reply(embed=e,ephemeral=True)
-    @commands.has_guild_permissions(administrator=True)
-    @settings.command(name="init", description="check if the bot has valid permissions and create a config.")
+    @settings.command(name="init", description="Check if the bot has valid permissions and create a config.")
     async def init(self, ctx):
         if not ctx.interaction:
-            await ctx.reply("## a prefixed command won't work for this.\n### please use the </settings init:1338195438494289964> command instead.", ephemeral=True)
+            await ctx.reply("## A prefixed command won't work for this.\n### Please use the </settings init:1338195438494289964> command instead.", ephemeral=True)
             return
-        e = discord.Embed(
-            title=f"codygen - initialization",
-            description=f"## hi! welcome to codygen :3\npress the button below to start the initialization :3"
+        embed = discord.Embed(
+            title="Codygen - Initialization",
+            description="## Hi! Welcome to Codygen :3\nPress the button below to start the initialization :3"
         )
-        await ctx.reply(embed=e, ephemeral=True, view=InitHomeView())
-        
+        await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
 
 async def setup(bot):
-    await bot.add_cog(settings(bot))
+    await bot.add_cog(Settings(bot))

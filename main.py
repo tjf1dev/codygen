@@ -30,7 +30,7 @@
 # feel free to read this terrible code, we are not responsible for any brain damage caused by this.
 
 # importing the modules
-import discord, os,dotenv, random, json, time, csv, psutil, datetime
+import discord, os,dotenv, random, json, time, csv, psutil, datetime, logging, requests, asyncio,io,traceback
 from discord.ext import commands
 from discord import app_commands
 from colorama import Fore # this module is so fore!!!
@@ -58,30 +58,67 @@ def get_guild_config(guild_id):
     except FileNotFoundError:
         return None
     
-def get_value_from_guild_config(guild_id, key):
+def set_guild_config_key(guild_id,key,value):
     try:
-        with open(f"data/guilds/{guild_id}.json", "r") as f:
-            data = json.load(f)
-            return data.get(key, None)
-    except FileNotFoundError:
-        return None
-def set_value_from_guild_config(guild_id, key, value):
-    try:
-        with open(f"data/guilds/{guild_id}.json", "r") as f:
-            data = json.load(f)
-            data[key] = value
-        with open(f"data/guilds/{guild_id}.json", "w") as f:
-            json.dump(data, f, indent=4)
-        return True
+        with open(f"data/guilds/{guild_id}.json","r") as f:
+            guild = json.load(f)
+            guild[key] = value
+        with open(f"data/guilds/{guild_id}.json","w") as f:
+            json.dump(guild,f,indent=4)
+            return True
     except FileNotFoundError:
         return False
-
+def get_global_config():
+    try:
+        with open("config.json", "r") as f:
+            data = json.load(f)
+            return data
+    except FileNotFoundError:
+        return None
 def get_config_defaults(type="guild"):
     with open("config.json","r") as f:
         data = json.load(f)
         if type == "guild":
             return data["template"]["guild"]
     return None
+# setup logging
+import logging
+from colorama import Fore
+logger = logging.getLogger(__name__)
+
+class ColorFormatter(logging.Formatter):
+    COLORS = {
+        'DEBUG': Fore.LIGHTBLACK_EX,
+        'INFO': Fore.BLUE,
+        'WARNING': Fore.YELLOW,
+        'ERROR': Fore.RED,
+        'CRITICAL': Fore.MAGENTA,
+        'OK': Fore.GREEN
+    }
+
+    def format(self, record):
+        log_color = self.COLORS.get(record.levelname, Fore.WHITE)
+        record.levelname = f"{log_color}{record.levelname}{Fore.RESET}"
+        record.msg = f"{log_color}{record.msg}{Fore.RESET}"
+        return super().format(record)
+
+# AHHH FUCK YOU
+if logger.hasHandlers():
+    logger.handlers.clear()
+
+handler = logging.StreamHandler()
+handler.setFormatter(ColorFormatter('%(asctime)s [ %(levelname)s ] %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
+
+# Disable discord.py logging
+discord_logger = logging.getLogger('discord')
+discord_logger.setLevel(logging.CRITICAL)
+for h in discord_logger.handlers:
+    discord_logger.removeHandler(h)
+
+logging.getLogger('discord.http').setLevel(logging.CRITICAL)
 
 # load configs
 
@@ -100,8 +137,8 @@ version = data["version"]
 
 # bot definitions
 
-activity = discord.Activity(type=discord.ActivityType.watching, name=f"version {version}")
-client = commands.Bot(
+activity = discord.Activity(type=discord.ActivityType.watching, name=f"v{version}")
+client = commands.AutoShardedBot(
     command_prefix=get_prefix,
     intents=discord.Intents.all(),
     status=discord.Status.online,
@@ -139,38 +176,51 @@ def verify_alt(guild_id,interaction):
 # run bot or smth idk
 
         
-@client.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.CheckFailure):
-        return 
+# @client.event
+# async def on_command_error(ctx, error):
+#     if isinstance(error, commands.CheckFailure):
+#         return 
     
-    elif isinstance(error, commands.CommandNotFound):
-        return
-    else:
-        e = discord.Embed(
-            title="an error occurred while trying to run this command",
-            description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen)",
-            color=0xff0000
-        ).add_field(
-            name="error",
-            value=f"```{error}```"
-        ).add_field(
-            name="command",
-            value=f"```{ctx.command.name}```", inline=False
-        ).add_field(
-            name="version",
-            value=f"```{version}```", inline=True
-        )
-        await ctx.send(embed=e)  # Handle other errors normally
-
+#     elif isinstance(error, commands.CommandNotFound):
+#         return
+#     else:
+#         e = discord.Embed(
+#             title="an error occurred while trying to run this command",
+#             description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen)",
+#             color=0xff0000
+#         ).add_field(
+#             name="error",
+#             value=f"```{error}```"
+#         ).add_field(
+#             name="command",
+#             value=f"```{ctx.command.name}```", inline=False
+#         ).add_field(
+#             name="version",
+#             value=f"```{version}```", inline=True
+#         )
+#         await ctx.send(embed=e)  # Handle other errors normally
+#         raise commands.errors.CommandError(str(error))
+loaded_cogs = set()
 @client.event
 async def on_ready():
+    if getattr(client, "already_ready", False):
+        return
+    client.already_ready = True
     client.start_time = time.time()
+    await client.load_extension('jishaku') # jsk #* pip install jishaku
     for filename in os.listdir("cogs"):
         if filename.endswith(".py"):
-            print(f"[ {Fore.GREEN}OK{Fore.RESET} ] Loading {Fore.BLUE}{filename}{Fore.RESET}") # fuckin
-            await client.load_extension(f"cogs.{filename[:-3]}") # do you need await for this??? yes you do
-    print(f"[ {Fore.GREEN}OK{Fore.RESET} ] bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
+            cog_name = filename[:-3]
+            if cog_name in loaded_cogs:
+                print(f"Skipping duplicate load of {cog_name}")
+                continue  # Prevent duplicate loading
+            loaded_cogs.add(cog_name)
+            logger.debug(f"loaded {cog_name}")
+            try:
+                await client.load_extension(f"cogs.{cog_name}")
+            except asyncio.TimeoutError:
+                print(f"Timeout while loading {cog_name}")
+    logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
 @client.event
 async def on_message(message):
     if message.author.bot:

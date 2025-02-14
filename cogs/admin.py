@@ -8,10 +8,12 @@ class admin(commands.Cog):
 
 
     #* THE FOLLOWING GROUP DOESNT HAVE A SLASH COMMANDS AND ITS ON PURPOSE!!
-    @commands.command(name="admin", description="commands for bot administratiors. you need to be a team member to run any of these commands", invoke_without_command=True)
+    @commands.group(name="admin", description="commands for bot administratiors. you need to be a team member to run any of these commands", invoke_without_command=True)
     async def admin(self,ctx):
         pass
-    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info(f"{self.__class__.__name__}: loaded.")
     @commands.is_owner()
     @admin.command(name="restart", description="fully restarts every instance of the bot") 
     async def restart(self,ctx):

@@ -5,7 +5,9 @@ class utility(commands.Cog):
         self.bot = bot
         self.description = "tools that can be helpful sometimes!"
         
-    
+    @commands.Cog.listener()
+    async def on_ready(self):
+        logger.info(f"{self.__class__.__name__}: loaded.")
     @commands.hybrid_group(name="utility",description="tools that can be helpful sometimes!")
     async def utility(self,ctx):
         pass
