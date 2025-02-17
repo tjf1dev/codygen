@@ -20,5 +20,6 @@ class utility(commands.Cog):
         embed.set_image(url=avatar)
         await ctx.reply(embed=embed)
 
+
 async def setup(bot):
     await bot.add_cog(utility(bot))

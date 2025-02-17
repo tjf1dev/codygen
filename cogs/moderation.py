@@ -4,7 +4,7 @@ class moderation(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "commands to help you manage your community."
-    
+    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @commands.hybrid_group(name="moderation",description="commands to help you manage your community.")
     async def moderation(self,ctx):
         pass
@@ -12,6 +12,7 @@ class moderation(commands.Cog):
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
     @verify()
+    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @moderation.command(name="viewbanned", description="View banned people.")
     async def viewbanned(self,ctx):
         if ctx.author.guild_permissions.ban_members and ctx.author != None:

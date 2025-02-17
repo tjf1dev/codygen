@@ -1,6 +1,6 @@
 from main import *
 import discord, random, json, csv
-import stats.stats
+import os
 
 class fun(commands.Cog):
     def __init__(self, bot):
@@ -130,71 +130,73 @@ class fun(commands.Cog):
     async def guess(self, ctx):
         global guessUser
         global guessUserDisplay
-        users = ctx.guild.members  # Lista wszystkich uczestników serwera
-        
-        try:
-            async with asyncio.timeout(5):
-                while True:
-                    user = random.choice(users)
-                    if not user.bot:
-                        break
-        except asyncio.TimeoutError:
-            e = discord.Embed(
-                title="sorry, we couldn't find a user to guess :broken_heart:",
-                color=0xff0000
-            )
-        guessUser = user.name # Nazwa użytkownika
-        guessUserDisplay = user.display_name # Nazwa wyświetlana
-        pfp = user.avatar.url  # URL awataru, do zgadywanki.
+        users = ctx.guild.members 
+        while True:
+            user = random.choice(users)
+            if not user.bot and user.avatar:
+                break
+        guessUser = user.name 
+        guessUserDisplay = user.display_name 
+        pfp = user.avatar.url 
 
-        # Wiadomość!
+
         embed = discord.Embed(title=" ", description="Who is that?", color=0x8ff0a4)
         embed.set_author(name="Which user is that??")
-        embed.set_image(url=pfp)
-        await ctx.send(embed=embed, view=guessButtons(guess_user=guessUser, guess_user_display=guessUserDisplay))  # Send message to the channel
+        embed.set_thumbnail(url=pfp)
+        await ctx.send(embed=embed, view=guessButtons(guess_user=guessUser, guess_user_display=guessUserDisplay, interaction=ctx)) 
     
     
-    @verify()
-    @fun_group.command(name="guessrank", description="Check how many times have you guessed!")
-    async def guessrank(self,ctx):
-        invoker = ctx.author
-        invokerName = ctx.author.name
+    # @verify()
+    # @fun_group.command(name="guessrank", description="Check how many times have you guessed!")
+    # async def guessrank(self,ctx):
+    #     invoker = ctx.author
+    #     invokerName = ctx.author.name
 
-        randomColor = random.randrange(0, 2**24)
-        randomHex = hex(randomColor)
-        randomHexINT = int(randomHex,16)
+    #     randomColor = random.randrange(0, 2**24)
+    #     randomHex = hex(randomColor)
+    #     randomHexINT = int(randomHex,16)
 
-        value = stats.stats.getUserValue(invokerName)
+    #     with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
+    #         data = json.load(f)
+    #         value = data["stats"]["guess"]["users"].get(invokerName, 0)
 
-        if value == 1:
-            raz = "time"
-        else:
-            raz = "times"
+    #     if value == 1:
+    #         raz = "time"
+    #     else:
+    #         raz = "times"
 
-        embed = discord.Embed(color=randomHexINT)
-        embed.add_field(name="User %s guessed %s %s!" % (invokerName, str(value), raz), value=" ", inline=True)
-        embed.set_image(url=ctx.author.avatar.url)  # Awatar Jupii
-        await ctx.send(embed=embed)
+    #     embed = discord.Embed(color=randomHexINT)
+    #     embed.add_field(name="User %s guessed %s %s!" % (invokerName, str(value), raz), value=" ", inline=True)
+    #     embed.set_thumbnail(url=ctx.author.avatar.url)
+    #     await ctx.send(embed=embed)
 
-    @verify()
-    @fun_group.command(name="guesstop", description="Guess the user by pfp!")
-    async def guesstop(self,ctx):
-        topValues = stats.stats.getAllValues()
-        top = {k: v for k, v in sorted(topValues.items(), key=lambda item: item[1], reverse=True)}
+    # @verify()
+    # @fun_group.command(name="guesstop", description="Guess the user by pfp!")
+    # async def guesstop(self,ctx):
+    #     with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
+    #         data = json.load(f)
+    #     topValues = data["stats"]["guess"]["users"]
 
-        randomColor = random.randrange(0, 2**24)
-        randomHex = hex(randomColor)
-        randomHexINT = int(randomHex,16)
+    #     invoker = ctx.author
+    #     invokerName = ctx.author.name
+    #     with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
+    #         data = json.load(f)
+    #         value = data["stats"]["guess"]["users"].get(invokerName, 0)
+    #     top = {k: v for k, v in sorted(topValues.items(), key=lambda item: item[1], reverse=True)}
 
-        embed = discord.Embed(color=randomHexINT)
-        for x, (user, value) in enumerate(top.items(), start=1):
-            if value == 1:
-                raz = "time"
-            else:
-                raz = "times"
-            embed.add_field(name=f"{x}. {user}", value=f"Guessed {value} {raz}.")
+    #     randomColor = random.randrange(0, 2**24)
+    #     randomHex = hex(randomColor)
+    #     randomHexINT = int(randomHex,16)
+
+    #     embed = discord.Embed(color=randomHexINT)
+    #     for x, (user, value) in enumerate(top.items(), start=1):
+    #         if value == 1:
+    #             raz = "time"
+    #         else:
+    #             raz = "times"
+    #         embed.add_field(name=f"{x}. {user}", value=f"Guessed {value} {raz}.")
         
-        await ctx.send(embed=embed)
+    #     await ctx.send(embed=embed)
 
     @verify() 
     @fun_group.command(name="cat",description="get a random pic of a cat :3") 
@@ -207,46 +209,88 @@ class fun(commands.Cog):
         )
         e.set_image(url=req.json()[0]["url"])
         await ctx.reply(embed=e)
-                
-# Guziki dla komendy zgaduj.
-class guessButtons(discord.ui.View):
-    def __init__(self, guess_user, guess_user_display, *, timeout=180): # Po trzech minutach od wysłania wiadomości guziki staną się nieaktywne.
-        super().__init__(timeout=timeout)
-        self.guess_user = guess_user
-        self.guess_user_display = guess_user_display
 
-    @discord.ui.button(label="Guess", style=discord.ButtonStyle.red)
-    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(Questionnaire(self.guess_user, self.guess_user_display))
+class guessNewGame(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="New Game", style=discord.ButtonStyle.green, custom_id="new_game")
+    async def new_game(self, interaction: discord.Interaction, button: discord.ui.Button):
+        global guessUser
+        global guessUserDisplay
+        users = interaction.guild.members 
+        while True:
+            user = random.choice(users)
+            if not user.bot and user.avatar:
+                break
+        guessUser = user.name 
+        guessUserDisplay = user.display_name 
+        pfp = user.avatar.url 
+
+
+        embed = discord.Embed(title=" ", description="Who is that?", color=0x8ff0a4)
+        embed.set_author(name="Which user is that??")
+        embed.set_thumbnail(url=pfp)
+        await interaction.response.send_message(embed=embed, view=guessButtons(guess_user=guessUser, guess_user_display=guessUserDisplay, interaction=interaction))
 class Questionnaire(discord.ui.Modal, title='Guess the user!'):
     name = discord.ui.TextInput(label='Which user is that??')
 
-    def __init__(self, guess_user, guess_user_display, *args, **kwargs):
+    def __init__(self, guess_user, guess_user_display, view, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.guess_user = guess_user
         self.guess_user_display = guess_user_display
+        self.view = view  # store the guessButtons view instance
 
     async def on_submit(self, interaction: discord.Interaction):
-        guessOG = self.name
-        guessLowercase = str(guessOG).lower()
+        # Get the user's guess from the text input's value
+        guessOG = self.name.value
+        guessLowercase = guessOG.lower()
+        guessUserDisplayLowercase = str(self.guess_user_display).lower()    
 
-        # zadziała np i THERI i theri i Theri i THeRi...
-        guessUserDisplayLowercase = str(self.guess_user_display).lower()
-
-        # Sprawdź czy użytkownik trafił albo na poprawną nazwę wyświetleniową albo na poprawną nazwę użytkownika.
-        # Np: i "theri" i "theridev" zadziała.
         if guessLowercase == self.guess_user.lower() or guessLowercase == guessUserDisplayLowercase:
             embed = discord.Embed(color=0x8ff0a4)
-            embed.add_field(name=f"{interaction.user.name} guessed it! This user is %s" % self.guess_user, value=" ", inline=True)
-            stats.stats.add(interaction.user.name, 1)
-            await interaction.response.send_message(embed=embed)
+            embed.add_field(name="Correct!", value=" ", inline=True)
+            embed.set_author(name=interaction.user.name + f" tried: {guessOG}",
+                             icon_url=interaction.user.avatar.url)
+            # Stop the guessButtons view (cancelling its timeout)
+            self.view.stop()
+            # Send a new game message
+            await interaction.response.send_message(embed=embed, view=guessNewGame())
         else:
-            # ups
             embed = discord.Embed(color=0xe01b24)
-            embed.add_field(name=f"Wrong! This user is NOT {guessLowercase}", value=" ", inline=True)
+            embed.add_field(name="Wrong!", value=" ", inline=True)
+            embed.set_author(name=interaction.user.name + f" tried: {guessOG}",
+                             icon_url=interaction.user.avatar.url)
             await interaction.response.send_message(embed=embed)
 
+
+class guessButtons(discord.ui.View):
+    def __init__(self, guess_user, guess_user_display, interaction, *, timeout=15):
+        super().__init__(timeout=timeout)
+        self.guess_user = guess_user
+        self.guess_user_display = guess_user_display
+        self.interaction = interaction  # Store the interaction for later use
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+
+        e = discord.Embed(
+            title="Time's up!",
+            description=f"The user was... {self.guess_user}",
+            color=0xff0000
+        )
+        await self.interaction.message.edit(view=self)
+        await self.interaction.followup.send(embed=e)
+
+    @discord.ui.button(label="Guess", style=discord.ButtonStyle.red)
+    async def confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Pass the current view (self) to the modal
+        await interaction.response.send_modal(
+            Questionnaire(self.guess_user, self.guess_user_display, view=self)
+        )
 
 
 async def setup(bot):
     await bot.add_cog(fun(bot))
+    

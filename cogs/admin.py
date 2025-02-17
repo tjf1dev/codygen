@@ -7,7 +7,7 @@ class admin(commands.Cog):
         self.description = "commands for bot administratiors. you need to be a team member to run any of these commands"
 
 
-    #* THE FOLLOWING GROUP DOESNT HAVE A SLASH COMMANDS AND ITS ON PURPOSE!!
+    #* THE FOLLOWING GROUP DOESNT HAVE A SLASH COMMAND AND ITS ON PURPOSE!!
     @commands.group(name="admin", description="commands for bot administratiors. you need to be a team member to run any of these commands", invoke_without_command=True)
     async def admin(self,ctx):
         pass
@@ -37,10 +37,18 @@ class admin(commands.Cog):
                 json.dump(get_config_defaults("guild"), f, indent=4)
             await ctx.reply(f"config for {ctx.guild.name} regenerated successfully")
     @commands.is_owner()
-    @admin.command(name="reload",description="reload a module. usage: reload <module>")
-    async def reload(ctx, module: str):
-        await client.reload_extension(module)
-        await ctx.reply(f"reloaded {module}")
-
+    @admin.command(name="purgetickets",description="purges all tickets in the guild. not recommended if there are active tickets. NOTE: THIS DOES NOT REMOVE CHANNELS")
+    async def purgetickets(self,ctx):
+        try:
+            with open(f"data/guilds/{ctx.guild.id}.json","r") as f:
+                data = json.load(f)
+                tickets = data["stats"]["ticket"]
+                data["stats"]["ticket"] = []
+                
+            with open(f"data/guilds/{ctx.guild.id}.json","w") as f:
+                json.dump(data,f,indent=4)
+                await ctx.reply("done")
+        except Exception as e:
+            await ctx.reply(f"error: {str(e)}")                
 async def setup(bot):
     await bot.add_cog(admin(bot))
