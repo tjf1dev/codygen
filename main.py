@@ -17,15 +17,10 @@
 #
 # 
 # codygen - a bot that does actually everything :sob:
-# written by a random gay fox and the cutest proot ever
-#
-#
-# "I love tjf1"
-# - cody, 9/2/2025
+# written by the cutest proot ever
 #
 # our links
 # tjf1 (the cutest proot): https://github.com/tjf1dev
-# cody: https://github.com/theridev
 #
 # feel free to read this terrible code, we are not responsible for any brain damage caused by this.
 
@@ -292,9 +287,6 @@ def verify_alt(guild_id,interaction):
         if interaction is not None:
             return True
         return prefix_enabled
-# cody: last seen at line 134
-# im alive, silly. - cody
-# nope, you arent :c
 # run bot or smth idk
 
         
