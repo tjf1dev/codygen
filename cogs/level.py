@@ -244,7 +244,7 @@ class Level(commands.Cog):
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="set", description="set a user's xp. requires administrator permissions")
     async def levelset(self,ctx,user:discord.User, xp:int):
-        if not ctx.author.guild_permissions.administrator:
+        if not ctx.author.guild_permissions.moderator:
             await ctx.reply("You do not have permission to use this command.")
             return
         if user==None:
