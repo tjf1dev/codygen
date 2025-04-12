@@ -10,7 +10,7 @@ class utility(commands.Cog):
         logger.info(f"{self.__class__.__name__}: loaded.")
     @commands.hybrid_group(name="utility",description="tools that can be helpful sometimes!")
     async def utility(self,ctx):
-        pass
+        await ctx.reply("utility")
     @utility.command(name="pfp", description="Get someones pfp")
     async def pfp(self,ctx, user: discord.User=None):
         if user == None:

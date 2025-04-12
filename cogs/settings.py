@@ -3,17 +3,10 @@ import json
 import os
 import discord
 from discord.ext import commands
-
-#* had to use ai on some of them sowwy :3 this is hard
-# Utility function: recursively update a dictionary with missing keys from a template.
-
-
 class EditConfigModal(discord.ui.Modal):
     def __init__(self, config):
         super().__init__(title="Edit Configuration")
         self.config = config
-        # Create an input field for each key-value pair in the config.
-        # (Note: this example simply adds one input per key; adjust as needed.)
         for key, value in config.items():
             full_path = f"{self.config.get('path', '.')}.{key}"
             self.add_item(discord.ui.InputText(
@@ -21,14 +14,11 @@ class EditConfigModal(discord.ui.Modal):
                 value=str(value),
                 custom_id=full_path
             ))
-        # For demonstration, save the last key/value (if you need a dedicated field)
         self.key = key
         self.value = value
 
     async def on_submit(self, interaction: discord.Interaction):
-        # For simplicity, we just grab the first input field’s value.
         new_value = self.children[0].value  
-        # In a full implementation, you might update the config and write it to disk.
         await interaction.response.send_message(f"`{self.key}` updated to `{new_value}`", ephemeral=True)
 
 class InitConfigView(discord.ui.View):
@@ -41,6 +31,14 @@ class InitConfigView(discord.ui.View):
     async def edit_config_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         modal = EditConfigModal(self.config)
         await interaction.response.send_modal(modal)
+def recursive_update(original: dict, template: dict) -> dict:
+    """Recursively update a dictionary with missing keys from a template."""
+    for key, value in template.items():
+        if isinstance(value, dict):
+            original[key] = recursive_update(original.get(key, {}), value)
+        else:
+            original.setdefault(key, value)
+    return original
 
 class InitHomeView(discord.ui.View):
     def __init__(self):
@@ -65,7 +63,6 @@ class InitHomeView(discord.ui.View):
         )
         await interaction.response.send_message(embed=stage1, ephemeral=True)
 
-        # Check that the bot has the required permissions
         guild = interaction.guild
         bot_member = guild.me
 
@@ -97,26 +94,23 @@ class InitHomeView(discord.ui.View):
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             return
-
-        # Set up or update the guild's configuration file.
-        guild_config_path = f"data/guilds/{guild.id}.json"
-        config_already_made = os.path.exists(guild_config_path)
-
-        # Load the template config (assumed to be stored under the key 'template' -> 'guild')
         with open("config.json", "r") as f:
             template_config = json.load(f)["template"]["guild"]
+        config_path = f"data/guilds/{guild.id}.json"
+        os.makedirs(os.path.dirname(config_path), exist_ok=True)
 
-        if not config_already_made:
-            os.makedirs(os.path.dirname(guild_config_path), exist_ok=True)
-            with open(guild_config_path, "w") as f:
-                json.dump(template_config, f, indent=4)
-        else:
-            with open(guild_config_path, "r") as f:
+        if os.path.exists(config_path):
+            # Merge missing keys from template
+            with open(config_path, 'r') as f:
                 existing_config = json.load(f)
-            # Recursively merge missing keys from the template into the existing config
-            updated_config = recursive_update(existing_config, template_config)
-            with open(guild_config_path, "w") as f:
+                updated_config = recursive_update(existing_config, template_config)
+            with open(config_path, 'w') as f:
                 json.dump(updated_config, f, indent=4)
+            config_message = "A configuration already exists and has been updated with missing keys."
+        else:
+            with open(config_path, 'w') as f:
+                json.dump(template_config, f, indent=4)
+            config_message = "A configuration has been created for your guild!"
 
         stage2 = discord.Embed(
             title="Initialization Finished!",
@@ -126,7 +120,7 @@ class InitHomeView(discord.ui.View):
         stage2.add_field(
             name="Tests Passed",
             value="Permissions\n> The bot has sufficient permissions to work!\n"
-                  f"Config\n> {'A configuration file already exists and has been updated with missing keys' if config_already_made else 'A configuration file has been created for your guild!'}"
+                  f"Config\n> {config_message}"
         )
 
         await interaction.followup.send(embed=stage2, ephemeral=True)
@@ -150,8 +144,6 @@ class Settings(commands.Cog):
     async def config(self, ctx):
         config = get_guild_config(ctx.guild.id)
         path = f"data/guilds/{ctx.guild.id}.json"
-
-        # Optionally patch out keys you don't want to display.
         config_patched = {k: v for k, v in config.items() if k != "level"}
         formatted_config = json.dumps(config_patched, indent=4)
 
@@ -178,7 +170,7 @@ class Settings(commands.Cog):
             return
         embed = discord.Embed(
             title="Codygen - Initialization",
-            description="## Hi! Welcome to Codygen :3\nPress the button below to start the initialization :3"
+            description="## Hi! Welcome to Codygen :3\nPress the button below to start the initialization"
         )
         await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
 

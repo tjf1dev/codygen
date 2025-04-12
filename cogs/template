@@ -1,0 +1,13 @@
+from main import *
+
+class NAME(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.description = ""
+    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+    @commands.hybrid_group(name="NAME",description="")
+    async def NAME(self,ctx):
+        pass
+
+async def setup(bot):
+    await bot.add_cog(NAME(bot))

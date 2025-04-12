@@ -1,14 +1,11 @@
 from main import *
-
 class ticket(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "commands to manage tickets"
-
     @commands.hybrid_group(name="ticket",description="create and manage tickets")
     async def ticket(self,ctx):
         pass
-    
     @verify()
     @ticket.command("create",description="create a ticket.")
     async def create(self,ctx, *, subject:str):
@@ -32,7 +29,6 @@ class ticket(commands.Cog):
                     guild.default_role: discord.PermissionOverwrite(view_channel=False),
                     author: discord.PermissionOverwrite(view_channel=True, send_messages=True),
                 }
-
                 for role_id in staff_roles:
                     role = guild.get_role(role_id)
                     if role:
@@ -73,8 +69,6 @@ class ticket(commands.Cog):
                         color=0xff0000
                     )
                     await ctx.reply(embed=error,ephemeral=True)
-                
-                
         except Exception:
             error =discord.Embed(
                 title="Error",
@@ -87,12 +81,10 @@ class ticket(commands.Cog):
     async def close(self, ctx):
         with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
             data = json.load(f)
-
         for ticket in data["stats"]["ticket"]:
             if ticket["channel"] == ctx.channel.id:
                 user_id = int(ticket["user"])
                 id = ticket["ticket"]
-
                 # Try fetching user and sending the DM
                 try:
                     user = await ctx.bot.fetch_user(user_id)
@@ -123,6 +115,5 @@ class ticket(commands.Cog):
                     await user.send("there was an issue trying to fully close the ticket. bot developers have been notified.")
                 # Delete the ticket channel
                 await ctx.channel.delete()
-
 async def setup(bot):
     await bot.add_cog(ticket(bot))

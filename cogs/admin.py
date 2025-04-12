@@ -17,7 +17,7 @@ class admin(commands.Cog):
     @commands.is_owner()
     @admin.command(name="restart", description="fully restarts every instance of the bot") 
     async def restart(self,ctx):
-        await ctx.reply("restarting bot...")
+        await ctx.message.add_reaction("✅")
         exit()
     @commands.is_owner()
     @admin.command(name="regen_config", description="regenerates the config for current guild.")

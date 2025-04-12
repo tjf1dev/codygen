@@ -1,6 +1,13 @@
 .env
 stats/stats.json
 stats.json
+stats/*
 __pycache__
 config.json
 data/*
+data
+logs/*
+.vscode
+cache
+cache/*
+logs
