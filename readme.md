@@ -25,7 +25,9 @@ It's steps are:
 - Click on "New application" in the home page then set your application name and agree to the terms
 - Go to Bot --> Reset Token then copy the token
 3. (optional, for last.fm integration) Obtain a API key from last.fm
+
 See the instructions [here](https://www.last.fm/api/authentication) to get a API key
+
 After obtaining the API key and it's corrisponding secret, go to the next step.
 4. Make a .env file with the contents:
 ```
