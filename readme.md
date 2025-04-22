@@ -27,6 +27,7 @@ It's steps are:
 3. (optional, for last.fm integration) Obtain a API key from last.fm
 
 See the instructions [here](https://www.last.fm/api/authentication) to get a API key
+
 After obtaining the API key and it's corrisponding secret, go to the next step.
 
 4. Make a .env file with the contents:
@@ -36,3 +37,44 @@ BOT_TOKEN=<bot_token> # insert here your token obtained for the bot
 LASTFM_API_KEY=<lastfm_api_key> # paste the api key here for last.fm if you have it
 LASTFM_SECRET=<lasfm_secret> # paste the secret here for last.fm if you have it
 ```
+5. Make a config.json file that looks like this:
+
+Below here is a minimal configuration needed to use the bot, configure it as you desire
+```json
+{
+  "version": "0.18-alpha",
+
+  "commands": {
+    "awawawa": {
+      "words": ["awawawa", "awa", "wawa"]
+    }
+  },
+
+  "cogs": {
+    "blacklist": []
+  },
+
+  "support": {
+    "channel": 123456789012345678 /* replace this with the desired channel ID */
+  },
+
+  "template": {
+    "guild": {
+      "prefix": {
+        "prefix": ">",
+        "prefix_enabled": true
+      },
+      "settings": {
+        "prefix": {"prefix_enabled": true}
+        /* add any other guild‐defaults your commands expect */
+      }
+    }
+  },
+
+  "guilds": {
+    /* once your bot joins a server,
+       it will write out data/guilds/<guild_id>.json for you */
+  }
+}
+```
+Remove any comments that have the `/* example comment /` suffix on them, otherwaise you will see JSON errors during launching.
