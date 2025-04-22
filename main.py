@@ -8,10 +8,56 @@ import discord, os,dotenv, random, json, time, flask, psutil, datetime, logging,
 from discord.ext import commands
 from discord import app_commands
 from colorama import Fore 
-# pre-init functions
+
+# ---- begin auto‑bootstrap of config.json ----
+
+DEFAULT_GLOBAL_CONFIG = {
+    "version": "0.18-alpha",
+
+    "commands": {
+        "awawawa": {
+            "words": ["awawawa", "awa", "wawa"]
+        }
+    },
+
+    "cogs": {
+        "blacklist": []
+    },
+
+    # channel ID where /support tickets get posted
+    "support": {
+        "channel": 123456789012345678
+    },
+
+    # this is the template used to init each guild's own config file
+    "template": {
+        "guild": {
+            "prefix": {
+                "prefix": ">",
+                "prefix_enabled": True
+            }
+            # …add any other per‑guild defaults your commands expect…
+        }
+    },
+
+    # gets populated at runtime as you change per‑guild settings
+    "guilds": {}
+}
+
 def get_global_config():
-    with open("config.json","r") as f:
-        return json.load(f)
+    """
+    Loads config.json, or if it doesn't exist / is invalid JSON,
+    writes out DEFAULT_GLOBAL_CONFIG and returns it.
+    """
+    try:
+        with open("config.json", "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        with open("config.json", "w") as f:
+            json.dump(DEFAULT_GLOBAL_CONFIG, f, indent=4)
+        return DEFAULT_GLOBAL_CONFIG
+# ---- end auto‑bootstrap ----
+# pre-init functions
 def get_config_defaults():
     with open(f"config.json","r") as f:
         return json.load(f)["template"]["guild"]
@@ -206,7 +252,7 @@ try:
     with open("config.json","r") as f:
         data = json.load(f)
 except Exception as e:
-    print(f"{Fore.LIGHTRED_EX}could not find config{Fore.RESET}")
+    print(f"{Fore.LIGHTRED_EX}could not find config, generating new configuration{Fore.RESET}")
     pass
 # command configs
 data = get_global_config()
@@ -339,7 +385,7 @@ async def on_command_error(ctx, error):
         return 
     if isinstance(error, commands.MissingPermissions):
         e = discord.Embed(
-            title="you dont have permissions to run this command.",
+            title="you don't have permissions to run this command.",
             color=0xff0000
         )
         await ctx.reply(embed=e,ephemeral=True)
