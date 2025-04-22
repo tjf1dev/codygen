@@ -27,8 +27,8 @@ It's steps are:
 3. (optional, for last.fm integration) Obtain a API key from last.fm
 
 See the instructions [here](https://www.last.fm/api/authentication) to get a API key
-
 After obtaining the API key and it's corrisponding secret, go to the next step.
+
 4. Make a .env file with the contents:
 ```
 BOT_TOKEN=<bot_token> # insert here your token obtained for the bot
