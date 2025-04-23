@@ -144,6 +144,46 @@ def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
 #         if type == "guild":   
 #             return data["template"]["guild"]
 #     return None
+# ---- begin auto-bootstrap and validation for .env ----
+
+# Required .env configurations
+REQUIRED_ENV = {
+    "BOT_TOKEN": "<your-discord-bot-token-here>",
+    # below here are only required for last.fm integration
+    # remove the comments if these vars should be required for self hosting
+    # "LASTFM_SECRET": "<your-last.fm-secret-if-used>"
+    # "LASTFM_API_KEY": "<your-last.fm-api-key-if-used>"
+}
+
+def ensure_env():
+    """
+    Checks that all REQUIRED_ENV keys exist and are non-empty.
+    If any are missing or empty, writes a .env.template file
+    (so the user can copy it to .env and fill in real values),
+    then exits with a meaningful message.
+    """
+    missing = []
+    for key, placeholder in REQUIRED_ENV.items():
+        val = os.getenv(key)
+        if not val:
+            missing.append(key)
+
+    if missing:
+        # Write a .env.template with placeholders
+        with open(".env.template", "w") as f:
+            for key, placeholder in REQUIRED_ENV.items():
+                f.write(f"{key}={placeholder}\n")
+        print(
+            f"{Fore.LIGHTRED_EX}ERROR: Missing environment variables: "
+            + ", ".join(missing)
+            + "\nI have generated a `.env.template` in this folder.\n"
+            + "\n By default, you may not see files that have a dot in them, so enable listing of hidden files to see it.\n"
+            + f"→ Copy it to `.env` and fill in the real values before restarting.\n"
+            + f"For more details on how to configure the bot, please refer to the official documentation:\n"
+            + f"https://github.com/tjf1dev/codygen#self-hosting.{Fore.RESET}"
+        )
+        sys.exit(1)
+
 
 # flask flask flask flask
 app = flask.Flask("codygen")
@@ -155,9 +195,16 @@ app = flask.Flask("codygen")
 def callback():
     token = flask.request.args.get("token")
     uid = flask.request.args.get("user")
-    api_key = os.environ['LASTFM_API_KEY']
-    secret = os.environ['LASTFM_SECRET']
-
+    try:
+        api_key = os.environ['LASTFM_API_KEY']
+        secret = os.environ['LASTFM_SECRET']
+    except KeyError:
+        logger.error(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
+        output = {
+           "error": "Misconfigured bot configuration",
+           "details": ".env file appears to have missing LASTFM_SECRET and/or LASTFM_API_KEY, contact the bot administrator for more details."
+        }
+        return output
     if not token or not uid:
         return {"error": "Missing parameters", "details": "Token or user ID is missing"}
     params = {
@@ -419,7 +466,7 @@ async def on_guild_join(guild):
     )
     e2 = discord.Embed(
         title="codygen will now attempt to automatically initizalize in your server.",
-        description="> please wait, it can take a while.\n> note: if codygen doesnt update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
+        description="> please wait, it can take a while.\n> note: if codygen dosen't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
         color=0xd600a1
     )
     await guild.owner.send(embeds=[e,e2])
@@ -618,7 +665,7 @@ async def sync(ctx, *, flags=None):
 async def help_command(ctx):
     embed = discord.Embed(
         title="codygen",
-        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menus below to search for commands and their usages.", # teap
+        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # teap
         color=0xffffff
     )
     await ctx.reply(embed=embed, view=HelpHomeView(client),ephemeral=True)
@@ -630,10 +677,10 @@ async def support(ctx,topic:str):
     # user side
     e = discord.Embed(
         title="ticket has been sent.",
-        description="please note that it may take a few days to recieve a response.\nyou will recieve a dm from codygen if you do.\nfor faster response time, please join our [server](<https://discord.gg/WyxN6gsQRH>).",
+        description="please note that it may take a few days to receive a response.\nyou will recieve a DM from codygen if you do.\nfor faster response time, please join our [server](<https://discord.gg/WyxN6gsQRH>).",
         color=0xffffff
     ).add_field(
-        name="ticket id (please keep this for reference.)",
+        name="ticket ID (please keep this for reference.)",
         value=f"```{ticket_id}```"
     )
     msg = discord.Embed(
@@ -658,6 +705,7 @@ async def support(ctx,topic:str):
     channel = await client.fetch_channel(channel_id)
     await channel.send(f"{ctx.author.id}\n{ticket_id}", embed=e2, view=supportReply())
 if __name__ == "__main__":
+    ensure_env()
     def run_app():
         app.run("0.0.0.0",port=4887)
 

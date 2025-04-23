@@ -1,3 +1,4 @@
+requests
 discord.py
 python-dotenv 
 flask
@@ -5,3 +6,4 @@ psutil
 asyncio
 colorama
 jishaku
+pillow

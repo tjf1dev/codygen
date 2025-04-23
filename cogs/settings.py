@@ -140,7 +140,7 @@ class Settings(commands.Cog):
         pass
 
     @commands.has_guild_permissions(administrator=True)
-    @settings.command(name="config", description="Change the configs for your guild. Usage: settings config <key> <value>")
+    @settings.command(name="config", description="Change the configurations for your guild. Usage: settings config <key> <value>")
     async def config(self, ctx):
         config = get_guild_config(ctx.guild.id)
         path = f"data/guilds/{ctx.guild.id}.json"
@@ -176,3 +176,4 @@ class Settings(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(Settings(bot))
+
