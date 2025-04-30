@@ -36,7 +36,7 @@ class moderation(commands.Cog):
             
             await ctx.reply(embed=e,ephemeral=True)      
         else:
-            await ctx.reply("you dont have permission to do this",ephemeral=True)
+            await ctx.reply("you don't have permission to do this",ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(moderation(bot))

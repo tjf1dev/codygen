@@ -16,7 +16,7 @@ class fm(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Use your Last.fm integration to check what you're listening to."
-    
+
     async def fetch_now_playing(self, username, raw:bool=False):
         """Fetches the currently playing track, scrobble count, and track play count for a Last.fm user."""
         api_key = os.environ["LASTFM_API_KEY"]
@@ -146,6 +146,6 @@ class fm(commands.Cog):
                         value=str(err)
                     )
                     view = lastfmAuthView(ctx.author.id)
-                    await ctx.reply(embed=e, view=view, ephemeral=True)                   
+                    await ctx.reply(embed=e, view=view, ephemeral=True)
 async def setup(bot):
     await bot.add_cog(fm(bot))

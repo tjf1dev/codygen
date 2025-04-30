@@ -4,11 +4,11 @@ from main import *
 class admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = "commands for bot administratiors. you need to be a team member to run any of these commands"
+        self.description = "commands for bot administrators. you need to be a team member to run any of these commands"
 
 
     #* THE FOLLOWING GROUP DOESNT HAVE A SLASH COMMAND AND ITS ON PURPOSE!!
-    @commands.group(name="admin", description="commands for bot administratiors. you need to be a team member to run any of these commands", invoke_without_command=True)
+    @commands.group(name="admin", description="commands for bot administrators. you need to be a team member to run any of these commands", invoke_without_command=True)
     async def admin(self,ctx):
         pass
     @commands.Cog.listener()
@@ -24,7 +24,7 @@ class admin(commands.Cog):
     # use -g flag for global. #! DEFINITELY NOT RECOMMENDED WIPES EVERY CONFIG PLEASE DON'T
     async def regen_config(self, ctx, *, flags=None):
         if flags == f"-g {GLOBAL_REGEN_PASSWORD}":
-            await ctx.reply("regenerating global config. please note that this is not recommended. change the password in the .env file after the regen is done.")
+            await ctx.reply("regenerating global config. please note that this is not recommended. change the password in the .env file after the regeneration is done.")
             time.sleep(5)
             for filename in os.listdir("data/guilds"):
                 file_path = os.path.join("data/guilds", filename)
@@ -44,11 +44,11 @@ class admin(commands.Cog):
                 data = json.load(f)
                 tickets = data["stats"]["ticket"]
                 data["stats"]["ticket"] = []
-                
+
             with open(f"data/guilds/{ctx.guild.id}.json","w") as f:
                 json.dump(data,f,indent=4)
                 await ctx.reply("done")
         except Exception as e:
-            await ctx.reply(f"error: {str(e)}")                
+            await ctx.reply(f"error: {str(e)}")
 async def setup(bot):
     await bot.add_cog(admin(bot))
