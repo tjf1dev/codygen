@@ -6,9 +6,9 @@ labels:
 body:
   - type: dropdown
     id: dropdown-0
+    required: true
     attributes:
       label: how did you find this issue?
-      required: true
       options:
         - codygen error message ("an error occured while trying to run this
           command")
@@ -20,14 +20,14 @@ body:
     attributes:
       label: what command did you find the issue in?
       placeholder: 'hint: use the "command" value if you have an error message'
-      required: true
+    required: true
   - type: textarea
     id: textarea-2
     attributes:
       label: what did you expect to happen
-      required: true
+    required: true
   - type: textarea
     id: textarea-3
     attributes:
       label: what happened
-      required: true
+    required: true
