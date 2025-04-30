@@ -9,40 +9,7 @@ from discord.ext import commands
 from discord import app_commands
 from colorama import Fore 
 
-# ---- begin auto‑bootstrap of config.json ----
-
-DEFAULT_GLOBAL_CONFIG = {
-    "version": "0.18-alpha",
-
-    "commands": {
-        "awawawa": {
-            "words": ["awawawa", "awa", "wawa"]
-        }
-    },
-
-    "cogs": {
-        "blacklist": []
-    },
-
-    # channel ID where /support tickets get posted
-    "support": {
-        "channel": 123456789012345678
-    },
-
-    # this is the template used to init each guild's own config file
-    "template": {
-        "guild": {
-            "prefix": {
-                "prefix": ">",
-                "prefix_enabled": True
-            }
-            # …add any other per‑guild defaults your commands expect…
-        }
-    },
-
-    # gets populated at runtime as you change per‑guild settings
-    "guilds": {}
-}
+DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
 def get_global_config():
     """
@@ -56,7 +23,7 @@ def get_global_config():
         with open("config.json", "w") as f:
             json.dump(DEFAULT_GLOBAL_CONFIG, f, indent=4)
         return DEFAULT_GLOBAL_CONFIG
-# ---- end auto‑bootstrap ----
+
 # pre-init functions
 def get_config_defaults():
     with open(f"config.json","r") as f:
@@ -144,7 +111,6 @@ def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
 #         if type == "guild":   
 #             return data["template"]["guild"]
 #     return None
-# ---- begin auto-bootstrap and validation for .env ----
 
 # Required .env configurations
 def get_required_env():
