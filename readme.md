@@ -33,5 +33,7 @@ pip install -r requirements.txt
 
 after obtaining the API key and it's coresponding secret, go to the next step.
 
-5. rename `.env.template` to `.env` and fill out it's values.
+5. rename `.env.template` to `.env` and fill out it's values. do the same with `config.json`
+> [!WARNING]
+> if you skip step 5, the bot won't be able to start and/or have problems.
 6. run `main.py`!

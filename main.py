@@ -147,34 +147,29 @@ def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
 # ---- begin auto-bootstrap and validation for .env ----
 
 # Required .env configurations
-REQUIRED_ENV = {
-    "BOT_TOKEN": "<your-discord-bot-token-here>",
-    # below here are only required for last.fm integration
-    # remove the comments if these vars should be required for self hosting
-    # "LASTFM_SECRET": "<your-last.fm-secret-if-used>"
-    # "LASTFM_API_KEY": "<your-last.fm-api-key-if-used>"
-}
+def get_required_env():
+    r = []
+    with open(".env.template","r") as f:
+        lines = f.readlines()
+        for l in lines:
+            r.append(l.split("=")[0])
+REQUIRED_ENV = get_required_env()
 
 def ensure_env():
     """
     Checks that all REQUIRED_ENV keys exist and are non-empty.
-    If any are missing or empty, writes a .env.template file
     (so the user can copy it to .env and fill in real values),
     then exits with a meaningful message.
     """
     missing = []
-    for key, placeholder in REQUIRED_ENV.items():
+    for key in REQUIRED_ENV.items():
         val = os.getenv(key)
         if not val:
             missing.append(key)
 
     if missing:
-        # Write a .env.template with placeholders
-        with open(".env.template", "w") as f:
-            for key, placeholder in REQUIRED_ENV.items():
-                f.write(f"{key}={placeholder}\n")
-        print(
-            f"{Fore.LIGHTRED_EX}ERROR: Missing environment variables: "
+        logger.error(
+            f"Missing environment variables: "
             + ", ".join(missing)
             + "\nI have generated a `.env.template` in this folder.\n"
             + "\n By default, you may not see files that have a dot in them, so enable listing of hidden files to see it.\n"
