@@ -6,7 +6,8 @@ labels:
 body:
   - type: dropdown
     id: dropdown-0
-    required: true
+    validations:
+      required: true
     attributes:
       label: how did you find this issue?
       options:
@@ -20,14 +21,17 @@ body:
     attributes:
       label: what command did you find the issue in?
       placeholder: 'hint: use the "command" value if you have an error message'
-    required: true
+    validations:
+      required: true
   - type: textarea
     id: textarea-2
     attributes:
       label: what did you expect to happen
-    required: true
+    validations:
+      required: true
   - type: textarea
     id: textarea-3
     attributes:
       label: what happened
-    required: true
+    validations:
+      required: true
