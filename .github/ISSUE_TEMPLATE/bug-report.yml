@@ -1,5 +1,4 @@
-name: bug
-title: 🐛 Report a bug
+name: 🐛 Report a bug
 description: found an error? report it here!
 labels:
   - unconfirmed bug
