@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 # codygen - a bot that does actually everything :sob:
 #
 # tjf1: https://github.com/tjf1dev
