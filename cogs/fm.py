@@ -1,11 +1,39 @@
 from main import *
-import flask
+import flask, base64, hmac
 
 class lastfmAuthView(discord.ui.View):
+    @discord.ui.button(label="Login", style=discord.ButtonStyle.primary)
+    async def auth_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        view = lastfmAuthFinal(interaction.user.id)
+        e = discord.Embed(
+            title="",
+            description="## last.fm authentication\npress the button below to safely authenticate with last.fm",
+            color=0xff0f77
+        )
+        await interaction.response.send_message(
+            embed=e,
+            view=view,
+            ephemeral=True
+        )
+class lastfmAuthFinal(discord.ui.View):
     def __init__(self, user_id):
         super().__init__(timeout=None)
-        self.add_item(discord.ui.Button(label="Authenticate", url=f"https://www.last.fm/api/auth?api_key={os.environ['LASTFM_API_KEY']}&cb={os.environ['LASTFM_CALLBACK_URL']}?user={user_id}"))
+        self.add_item(
+            discord.ui.Button(
+                label="Authenticate",
+                url=f"https://www.last.fm/api/auth?api_key={os.environ['LASTFM_API_KEY']}&cb={os.environ['LASTFM_CALLBACK_URL']}?state={generate_full_state(user_id)}"
+            )
+         )
+def generate_full_state(user_id: int) -> str:
+    hash = generate_state_hash(user_id, os.getenv("STATE_SALT"))
+    id_enc = base64.b64encode(str(user_id).encode())
+    return f"{id_enc}#{hash}"
 
+def generate_state_hash(user_id: int, secret: str) -> str:
+    user_bytes = str(user_id).encode()
+    secret_bytes = secret.encode()
+    digest = hmac.new(secret_bytes, user_bytes, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest)[:12].decode()
 import discord
 import json
 import requests

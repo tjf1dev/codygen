@@ -53,7 +53,9 @@ def set_guild_config_key(guild_id, key, value):
 
 # example
 # set_guild_config_key(123456789, "settings.prefix", "!")
-
+def state_to_id(state: str) -> str:
+    euid = state.split("#")[0]
+    return base64.b64decode(euid).decode()
 def get_prefix(bot=None, message=None):
     try:
         with open("config.json","r") as f:
@@ -157,7 +159,8 @@ app = flask.Flask("codygen")
 @app.route("/callback")
 def callback():
     token = flask.request.args.get("token")
-    uid = flask.request.args.get("user")
+    state = flask.request.args.get("state")
+    uid = state_to_id(state)
     try:
         api_key = os.environ['LASTFM_API_KEY']
         secret = os.environ['LASTFM_SECRET']
