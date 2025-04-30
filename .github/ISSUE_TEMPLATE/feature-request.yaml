@@ -5,7 +5,7 @@ labels:
 body:
   - type: markdown
     attributes:
-      value: "> [!WARNING]|> Please don't create an issue if already made a PR. If you know how to code this change, create a pull request"
+      value: "### > Please don't create an issue if already made a PR. If you know how to code this change, create a pull request"
   - type: dropdown
     id: dropdown-0
     validations:
