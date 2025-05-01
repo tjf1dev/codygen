@@ -1,0 +1,40 @@
+name: 🛠️ Request a feature
+description: ask for an addition to codygen!
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: "### > Please don't create an issue if already made a PR. If you know how to code this change, create a pull request"
+  - type: dropdown
+    id: dropdown-0
+    validations:
+      required: true
+    attributes:
+      label: what type of feature you want to request?
+      options:
+        - add a new command
+        - change an existing command
+        - not related to commands
+        - other
+  - type: input
+    id: input-1
+    attributes:
+      label: a quick summary of what you want to add
+    validations:
+      required: true
+  - type: textarea
+    id: textarea-2
+    attributes:
+      label: whats the ideal, in detail solution to your request
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: "I've made sure this feature request doesnt already exist / isnt in progress"
+        - label: "I've made sure this feature request would be a good addition to Codygen"
+        - label: "I did not create a pull request about this request."
+        
