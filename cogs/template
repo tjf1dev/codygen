@@ -6,7 +6,7 @@ class NAME(commands.Cog):
         self.description = ""
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @commands.hybrid_group(name="NAME",description="")
-    async def NAME(self,ctx):
+    async def NAME(self,ctx: commands.Context):
         pass
 
 async def setup(bot):

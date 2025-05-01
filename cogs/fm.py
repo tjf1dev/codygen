@@ -12,7 +12,7 @@ class lastfmAuthView(discord.ui.View):
             e = discord.Embed(
                 title="",
                 description=f"## last.fm authentication\npress the button below to safely authenticate with last.fm as {interaction.user.name}",
-                color=0xff0f77
+                color=Color.accent_og
             )
             await interaction.response.send_message(
                 embed=e,
@@ -129,14 +129,14 @@ class fm(commands.Cog):
         }, None
 
     @commands.hybrid_group(name="lastfm", description="all commands with the last.fm api.", with_app_command=True)
-    async def lastfm(self, ctx):
+    async def lastfm(self, ctx: commands.Context):
         pass
 
     @commands.is_owner()
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
     @lastfm.command(name="raw", description="view the raw data for your currently playing track")
-    async def fm_raw(self, ctx):
+    async def fm_raw(self, ctx: commands.Context):
         with open("data/last.fm/users.json", "r") as f:
             data = json.load(f)
             username = data.get(str(ctx.author.id), {}).get("session", {}).get("name", {})
@@ -145,7 +145,7 @@ class fm(commands.Cog):
         track_info_raw = json.dumps(track_info_raw, indent=2)
         fields = [track_info_raw[i:i + 1000] for i in range(0, len(track_info_raw), 1000)]
 
-        e = discord.Embed(title="raw data", color=0xff0000)
+        e = discord.Embed(title="raw data", color=Color.accent_og)
         for i, field in enumerate(fields):
             e.add_field(name=f"part {i + 1}", value=f"```json\n{field}```", inline=False)
 
@@ -155,7 +155,7 @@ class fm(commands.Cog):
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
     @commands.hybrid_command(name="fm", description="see what you're listening to.", with_app_command=True)
-    async def fm(self, ctx):
+    async def fm(self, ctx: commands.Context):
         try:
             with open("data/last.fm/users.json", "r") as f:
                 data = json.load(f)
@@ -165,7 +165,7 @@ class fm(commands.Cog):
             # Create embed with track scrobble count
             e = discord.Embed(
                 description=f"## [{track_info['track']}]({track_info['url']})\n### by {track_info['artist']}, on {track_info['album']}\n{track_info['track_scrobble_count']} scrobbles • {track_info['scrobble_count']} total",
-                color=0x00ffbb
+                color=Color.lblue
             )
             e.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar.url)
 
@@ -174,7 +174,7 @@ class fm(commands.Cog):
                 e = discord.Embed(
                     title="Not logged in!",
                     description="Please use the button below to authenticate with Last.fm",
-                    color=0xff0000
+                    color=Color.negative
                 )
                 view = lastfmAuthView()
                 await ctx.reply(embed=e, view=view, ephemeral=True)            
@@ -182,7 +182,7 @@ class fm(commands.Cog):
             e = discord.Embed(
                 title="An error has occured!",
                 description="Please report this to the bot developers. you can also try authenticating again",
-                color=0xff0000
+                color=Color.negative
             ).add_field(
                 name=f"{type(err).__name__}",
                 value=str(err)

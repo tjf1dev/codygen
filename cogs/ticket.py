@@ -4,11 +4,11 @@ class ticket(commands.Cog):
         self.bot = bot
         self.description = "commands to manage tickets"
     @commands.hybrid_group(name="ticket",description="create and manage tickets")
-    async def ticket(self,ctx):
+    async def ticket(self,ctx: commands.Context):
         pass
     @verify()
     @ticket.command("create",description="create a ticket.")
-    async def create(self,ctx, *, subject:str):
+    async def create(self,ctx: commands.Context, *, subject:str):
         # check if the config exists and tickets are enabled.
         try:
             enabled = await get_guild_config(ctx.guild.id)["modules"]["ticket"]["enabled"]
@@ -78,7 +78,7 @@ class ticket(commands.Cog):
             await ctx.reply(embed=error)
     @verify()
     @ticket.command(name="close", description="Closes the current ticket.")
-    async def close(self, ctx):
+    async def close(self, ctx: commands.Context):
         with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
             data = json.load(f)
         for ticket in data["stats"]["ticket"]:

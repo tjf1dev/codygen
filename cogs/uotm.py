@@ -9,10 +9,10 @@ class uotm(commands.Cog):
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
     @commands.hybrid_group(name="uotm",description="user of the month")
-    async def uotm(self,ctx):
+    async def uotm(self,ctx: commands.Context):
         pass
     @uotm.command(name="vote", description="vote for one of the uotm candidates")
-    async def vote(self,ctx, user: discord.User):
+    async def vote(self,ctx: commands.Context, user: discord.User):
         config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
@@ -41,7 +41,7 @@ class uotm(commands.Cog):
         await set_guild_config_key(ctx.guild.id, f"stats.uotm.users.{ctx.author.id}.vote", user.id)
         return
     @uotm.command(name="apply", description="apply for uotm")
-    async def apply(self,ctx):
+    async def apply(self,ctx: commands.Context):
         config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
@@ -60,7 +60,7 @@ class uotm(commands.Cog):
         await set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
         await ctx.send("you are now candidate for user of the month!",ephemeral=True)
     @uotm.command(name="leave", description="remove yourself from uotm")
-    async def leave(self,ctx):
+    async def leave(self,ctx: commands.Context):
         config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
@@ -77,7 +77,7 @@ class uotm(commands.Cog):
                 return
     @commands.has_permissions(administrator=True)
     @uotm.command(name="finish", description="wipe uotm votes and finish the current month")
-    async def finish(self,ctx):
+    async def finish(self,ctx: commands.Context):
         config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
@@ -130,7 +130,7 @@ class uotm(commands.Cog):
         await set_guild_config_key(ctx.guild.id, "stats.uotm.users", {})
         await ctx.send(embeds=[e,results_embed],ephemeral=False)
     @uotm.command(name="view", description="view current uotm standings")
-    async def view(self,ctx):
+    async def view(self,ctx: commands.Context):
         # sourced from the og "tjf1" bot :3    
         vote_count = {}
         candidates = await get_guild_config(ctx.guild.id)["stats"]["uotm"]["candidates"]

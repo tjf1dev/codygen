@@ -3,34 +3,6 @@ import json
 import os
 import discord
 from discord.ext import commands
-class EditConfigModal(discord.ui.Modal):
-    def __init__(self, config):
-        super().__init__(title="Edit Configuration")
-        self.config = config
-        for key, value in config.items():
-            full_path = f"{self.config.get('path', '.')}.{key}"
-            self.add_item(discord.ui.InputText(
-                label=full_path,
-                value=str(value),
-                custom_id=full_path
-            ))
-        self.key = key
-        self.value = value
-
-    async def on_submit(self, interaction: discord.Interaction):
-        new_value = self.children[0].value  
-        await interaction.response.send_message(f"`{self.key}` updated to `{new_value}`", ephemeral=True)
-
-class InitConfigView(discord.ui.View):
-    def __init__(self, config, interaction):
-        super().__init__()
-        self.config = config
-        self.interaction = interaction
-
-    @discord.ui.button(label="Edit Configuration", style=discord.ButtonStyle.blurple, custom_id="edit_config_button")
-    async def edit_config_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = EditConfigModal(self.config)
-        await interaction.response.send_modal(modal)
 def recursive_update(original: dict, template: dict) -> dict:
     """Recursively update a dictionary with missing keys from a template."""
     for key, value in template.items():
@@ -51,7 +23,7 @@ class InitHomeView(discord.ui.View):
             error_embed = discord.Embed(
                 title="Access Denied",
                 description="### You must have admin to run this, silly!",
-                color=0xff0000
+                color=Color.negative
             )
             await interaction.response.send_message(embed=error_embed, ephemeral=True)
             return
@@ -59,7 +31,7 @@ class InitHomeView(discord.ui.View):
         stage1 = discord.Embed(
             title="Initialization in Progress... Hang on!",
             description="This message will update once it's done :3",
-            color=0xff0000
+            color=Color.negative
         )
         await interaction.response.send_message(embed=stage1, ephemeral=True)
 
@@ -90,7 +62,7 @@ class InitHomeView(discord.ui.View):
             error_embed = discord.Embed(
                 title="Init Failed: Missing Permissions",
                 description=f"### Missing the following permissions: `{', '.join(missing_perms)}`\nPlease fix the permissions and try again!",
-                color=0xff0000
+                color=Color.negative
             )
             await interaction.followup.send(embed=error_embed, ephemeral=True)
             return
@@ -133,35 +105,34 @@ class Settings(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
-
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(name="settings", description="Settings commands to manage your bot instance.")
-    async def settings(self, ctx):
+    async def settings(self, ctx: commands.Context):
         pass
 
     @commands.has_guild_permissions(administrator=True)
-    @settings.command(name="config", description="Change the configurations for your guild. Usage: settings config <key> <value>")
-    async def config(self, ctx):
+    @settings.command(name="config", description="View the configuration for your guild")
+    async def config(self, ctx: commands.Context):
         config = await get_guild_config(ctx.guild.id)
         path = f"data/guilds/{ctx.guild.id}.json"
-        config_patched = {k: v for k, v in config.items() if k != "level"}
+        config_patched = {k: v for k, v in config.items() if k != "stats"}
         formatted_config = json.dumps(config_patched, indent=4)
 
         embed = discord.Embed(
-            title="Configure Codygen",
+            title="codygen's config",
             description=(
-                f"Path to your config file: `{path}`\n"
-                f"Current config: ```json\n{formatted_config}```\n"
-                "## Use the navigation menu below to change your config"
+                f"path to your config file: `{path}`\n"
+                f"current config: ```json\n{formatted_config}```\nmodify it using commands in /settings."
             ),
             color=0xf1f1f1
         )
-        await ctx.reply(embed=embed, ephemeral=True, view=InitConfigView(config, ctx.interaction))
+        await ctx.reply(embed=embed, ephemeral=True)
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.has_guild_permissions(administrator=True)
     @settings.command(name="init", description="Check if the bot has valid permissions and create a config.")
-    async def init(self, ctx):
+    async def init(self, ctx: commands.Context):
         if not ctx.interaction:
             await ctx.reply(
                 "## A prefixed command won't work for this.\n### Please use the </settings init:1338195438494289964> command instead.",
@@ -173,7 +144,11 @@ class Settings(commands.Cog):
             description="## Hi! Welcome to Codygen :3\nPress the button below to start the initialization"
         )
         await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
-
+    @commands.has_guild_permissions(administrator=True)
+    @settings.command(name="prefix", description="View the current prefix and change it.")
+    async def prefix(self, ctx: commands.Context):
+        prefix = await get_prefix(self.bot, ctx)
+        e = discord.Embed()
 async def setup(bot):
     await bot.add_cog(Settings(bot))
 

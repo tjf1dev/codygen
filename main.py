@@ -6,11 +6,12 @@
 #
 # feel free to read this terrible code, i am not responsible for any brain damage caused by this.
 # importing the modules
-import discord, os, aiofiles, dotenv, random, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
+import discord, os, aiofiles, dotenv, random, io, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
 from discord.ext import commands
 from discord import app_commands
-from colorama import Fore 
-
+from colorama import Fore
+from extensions.colors import Color
+io # its being used in different cogs
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
 def get_global_config() -> dict:
@@ -262,6 +263,10 @@ client = commands.AutoShardedBot(
     allowed_installs=app_commands.AppInstallationType(guild=True,user=True)
 )
 tree = client.tree
+
+# client custom vars
+# these get passed to cogs
+client.color = Color
 # load env
 dotenv.load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN") # bot token
@@ -285,14 +290,14 @@ class HelpSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title=f"codygen - {self.values[0]}",
-            color=0xffffff
+            color=Color.white
         )
         cog = client.get_cog(self.values[0])
         if cog == None:
             fail = discord.Embed(
                 title="failed to load :broken_heart:",
                 description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
-                color=0xff0000
+                color=Color.negative
             )
             await interaction.response.edit_message(embed=fail)
             return
@@ -300,7 +305,7 @@ class HelpSelect(discord.ui.Select):
             fail = discord.Embed(
                 title="its quiet here...",
                 description=f"cogs.{self.values[0]} doesnt have any commands.",
-                color=0xff0000
+                color=Color.negative
             )
             await interaction.response.edit_message(embed=fail)
         else:
@@ -344,7 +349,7 @@ class SupportModal(discord.ui.Modal, title='Reply to Support Ticket'):
             e2 = discord.Embed(
                 title=f"{ticket_id} - reply sent",
                 description=f"```{self.response.value}```",
-                color=0x00eb71
+                color=Color.positive
             )
             await interaction.response.send_message(embed=e2)
         except discord.errors.Forbidden:
@@ -352,32 +357,37 @@ class SupportModal(discord.ui.Modal, title='Reply to Support Ticket'):
         await interaction.response.send_message(f'Response sent: {self.response.value}', ephemeral=True)
 # events
 def verify():
-    async def predicate(ctx):
-        # if ctx.guild is None:
-        #     return True
-        # prefix_enabled = await get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
-        # if prefix_enabled == None:
-        #     prefix_enabled == False
-        # if ctx.interaction is not None:
-        #     return True
-        # return prefix_enabled
-        return True # fuck off
-    return commands.check(predicate)
-async def verify_alt(guild_id,interaction):
-        prefix_enabled = await get_guild_config(guild_id)["prefix"]["prefix_enabled"]
+    """
+    checks for certain things that could not allow a command to send
+    """
+    async def predicate(ctx: commands.Context):
+        if ctx.guild is None:
+            return True
+        prefix_enabled = await get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
         if prefix_enabled == None:
             prefix_enabled == False
-        if interaction is not None:
+        if ctx.interaction is not None:
             return True
         return prefix_enabled
+    return commands.check(predicate)
+async def verify_alt(guild_id,interaction) -> bool:
+    """
+    verify() but instead of a decorator its a function
+    """
+    prefix_enabled = await get_guild_config(guild_id)["prefix"]["prefix_enabled"]
+    if prefix_enabled == None:
+        prefix_enabled == False
+    if interaction is not None:
+        return True
+    return prefix_enabled
 @client.event
-async def on_command_error(ctx, error):
+async def on_command_error(ctx: commands.Context, error):
     if isinstance(error, commands.CheckFailure):
         return 
     if isinstance(error, commands.MissingPermissions):
         e = discord.Embed(
             title="you don't have permissions to run this command.",
-            color=0xff0000
+            color=Color.negative
         )
         await ctx.reply(embed=e,ephemeral=True)
     elif isinstance(error, commands.CommandNotFound):
@@ -386,7 +396,7 @@ async def on_command_error(ctx, error):
         e = discord.Embed(
             title="an error occurred while trying to run this command",
             description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen)",
-            color=0xff0000
+            color=Color.negative
         ).add_field(
             name="error",
             value=f"```{error}```"
@@ -406,12 +416,12 @@ async def on_guild_join(guild):
     e = discord.Embed(
         title=f"Welcome to codygen! The bot has been successfully added to {guild.name}.",
         description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
-        color=0xffffff
+        color=Color.white
     )
     e2 = discord.Embed(
         title="codygen will now attempt to automatically initizalize in your server.",
         description="> please wait, it can take a while.\n> note: if codygen dosen't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
-        color=0xd600a1
+        color=Color.purple
     )
     await guild.owner.send(embeds=[e,e2])
     bot_member = guild.me
@@ -438,7 +448,7 @@ async def on_guild_join(guild):
         error_embed = discord.Embed(
             title="Init Failed: Missing Permissions",
             description=f"### Missing the following permissions: `{', '.join(missing_perms)}`\nPlease fix the permissions and try again!",
-            color=0xff0000
+            color=Color.negative
         )
         await guild.owner.send(embed=error_embed)
         return
@@ -459,7 +469,7 @@ async def on_guild_join(guild):
     stage2 = discord.Embed(
         title="Initialization Finished!",
         description="No errors found",
-        color=0x00ff00
+        color=Color.positive
     )
     stage2.add_field(
         name="Tests Passed",
@@ -517,11 +527,11 @@ async def on_ready():
 @app_commands.allowed_contexts(guilds=True,dms=True,private_channels=True)
 @app_commands.allowed_installs(guilds=True,users=True)
 @client.hybrid_command(name="ping", description="shows how well is codygen doing!") 
-async def ping(ctx):
+async def ping(ctx: commands.Context):
     e = discord.Embed(
         title=f"codygen v{version}",
         description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for more info",
-        color=0xff00ff
+        color=Color.purple
     )
     e.add_field(
         name="ping",
@@ -588,17 +598,17 @@ async def ping(ctx):
 @verify()
 @commands.is_owner()
 @client.hybrid_command(name="sync",description="syncs app commands")
-async def sync(ctx, *, flags=None): 
+async def sync(ctx: commands.Context, *, flags=None): 
     if flags == "-g":
         success = discord.Embed(
             title=f"successfully synced {len(tree.get_commands())} commands for all guilds!",
-            color=0x00ff00
+            color=Color.positive
         )
         await tree.sync()
     else:
         success = discord.Embed(
             title=f"successfully synced {len(tree.get_commands())} commands for this guild!",
-            color=0x00ff00
+            color=Color.positive
         )
         await tree.sync(guild=await client.fetch_guild(1333785291584180244))
     await ctx.reply(embed=success,ephemeral=True,mention_author=False)
@@ -606,23 +616,23 @@ async def sync(ctx, *, flags=None):
     name="help",
     description="shows useful info about the bot."
 )
-async def help_command(ctx):
+async def help_command(ctx: commands.Context):
     embed = discord.Embed(
         title="codygen",
-        description="**teap: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # teap
-        color=0xffffff
+        description="**tip: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # i can change it now
+        color=Color.purple
     )
     await ctx.reply(embed=embed, view=HelpHomeView(client),ephemeral=True)
 @app_commands.allowed_installs(guilds=False,users=True)
 @app_commands.allowed_contexts(guilds=False,dms=True,private_channels=True)
 @client.hybrid_command(name="support",description="contact the bot developers.")
-async def support(ctx,topic:str):
+async def support(ctx: commands.Context,topic:str):
     ticket_id=f"{ctx.author.name}{random.randint(1000000,9999999)}"
     # user side
     e = discord.Embed(
         title="ticket has been sent.",
         description="please note that it may take a few days to receive a response.\nyou will recieve a DM from codygen if you do.\nfor faster response time, please join our [server](<https://discord.gg/WyxN6gsQRH>).",
-        color=0xffffff
+        color=Color.white
     ).add_field(
         name="ticket ID (please keep this for reference.)",
         value=f"```{ticket_id}```"
@@ -630,7 +640,7 @@ async def support(ctx,topic:str):
     msg = discord.Embed(
         title="your message",
         description=f"{topic}",
-        color=0x5f5f5f
+        color=Color.gray
     )
     await ctx.reply(embeds=[e,msg],ephemeral=True)
     await ctx.author.send(embeds=[e,msg]) # dm
@@ -638,7 +648,7 @@ async def support(ctx,topic:str):
     e2 = discord.Embed(
         title="New support ticket",
         description=f"```{topic}```",
-        color=0x00eb71
+        color=Color.positive
     ).add_field(
         name="User",value=f"Name: {ctx.author.name} ({ctx.author.mention})\nID: {ctx.author.id}"
     ).add_field(

@@ -46,15 +46,6 @@ class level(commands.Cog):
                 return
             channel = await self.bot.fetch_channel(channel_id)
             
-            if not guild_config:
-                embed = discord.Embed(
-                    title="Moderation must run </settings init:1338195438494289964> first.",
-                    color=0xfd3553
-                )
-                embed.set_footer(text="Report this error to moderation.")
-                await message.channel.send(embed=embed)
-                return
-            
             users = guild_config.get("stats", {}).get("level", {}).get("users", {})
             user_xp = users.get(str(message.author.id), {}).get("xp", 0) 
             await set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", user_xp + xp_per_message)
@@ -88,14 +79,14 @@ class level(commands.Cog):
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @app_commands.allowed_installs(guilds=True,users=False)
     @commands.hybrid_group(name="level", description="Track and reward users for activity")
-    async def level(self, ctx):
+    async def level(self, ctx: commands.Context):
         pass
     #* writing code can be painful sometimes
     # this hurts
     @verify()
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="get", description="Check your current level.")
-    async def level_get(self, ctx, user:discord.User=None):
+    async def level_get(self, ctx: commands.Context, user:discord.User=None):
         if user==None:
             user = ctx.author
         data_path = f"data/guilds/{ctx.guild.id}.json"
@@ -152,7 +143,7 @@ class level(commands.Cog):
     @verify()
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="top", description="View the most active members of the server")
-    async def leveltop(self, ctx):
+    async def leveltop(self, ctx: commands.Context):
         data_path = f"data/guilds/{ctx.guild.id}.json"
         try:
             with open(data_path,"r") as f:
@@ -212,7 +203,7 @@ class level(commands.Cog):
     @verify()
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="set", description="set a user's xp. requires administrator permissions")
-    async def levelset(self,ctx,user:discord.User, xp:int):
+    async def levelset(self,ctx: commands.Context,user:discord.User, xp:int):
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
@@ -235,7 +226,7 @@ class level(commands.Cog):
     @verify()
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="refresh",description="synchronizes all levels and grants role rewards. administrator only")
-    async def levelrefresh(self, ctx):
+    async def levelrefresh(self, ctx: commands.Context):
         start_time = time.time()
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
@@ -287,7 +278,7 @@ class level(commands.Cog):
                 e = discord.Embed(
                     title="Leveling refresh complete",
                     description=f"## Users affected:\n" + "\n".join(affected_users) if affected_users else "No changes were made.",
-                    color=0xffffff
+                    color=Color.white
                 )
                 time_difference = elapsed_time - estimated_time
                 time_diff_sign = "+" if time_difference > 0 else "-"

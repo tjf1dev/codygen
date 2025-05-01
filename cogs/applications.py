@@ -6,19 +6,19 @@ class Applications(commands.Cog):
         self.description = "Manage server applications, if you have them enabled."
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @commands.hybrid_group(name="applications",description="Manage server applications, if you have them enabled.")
-    async def apps(self,ctx):
+    async def apps(self,ctx: commands.Context):
         pass
     
     @commands.has_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @apps.command(name="view-form",description="View the server's application form. This category is still in development")
-    async def view_form(self,ctx):
+    async def view_form(self,ctx: commands.Context):
         req = await custom_api_request(self.bot,f"/guilds/{ctx.guild.id}/member-verification",auth=True)
         if not req.ok:
             fail = discord.Embed(
                 title="failed to fetch information.",
                 description=f"code: {req.status_code}, [endpoint used]({req.url})",
-                color=0xff0000
+                color=Color.negative
             )
             await ctx.reply(embed=fail)
             return

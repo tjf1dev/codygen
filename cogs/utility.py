@@ -44,11 +44,11 @@ class utility(commands.Cog):
         logger.info(f"{self.__class__.__name__}: loaded.")
 
     @commands.hybrid_group(name="utility", description="tools that can be helpful sometimes!")
-    async def utility(self, ctx):
+    async def utility(self, ctx: commands.Context):
         await ctx.reply("utility")
 
     @utility.command(name="pfp", description="get someone's pfp")
-    async def pfp(self, ctx, user: discord.User = None):
+    async def pfp(self, ctx: commands.Context, user: discord.User = None):
         if user is None:
             user = ctx.author
         avatar = user.avatar.url
@@ -57,11 +57,11 @@ class utility(commands.Cog):
         await ctx.reply(embed=embed)
     @commands.has_permissions(manage_messages=True)
     @utility.group(name="status", description="status updates for various things")
-    async def status(self, ctx):
+    async def status(self, ctx: commands.Context):
         pass
     @commands.has_permissions(manage_messages=True)
     @status.command(name="post", description="status updates for various things, post update. timestamps are in CEST")
-    async def post(self, ctx, initial: str, title: str= "Downtime", channel: discord.TextChannel = None, ping: discord.Role = None):
+    async def post(self, ctx: commands.Context, initial: str, title: str= "Downtime", channel: discord.TextChannel = None, ping: discord.Role = None):
         now_cest = datetime.now(ZoneInfo("Europe/Warsaw"))
         if not channel:
             channel = ctx.channel
@@ -82,7 +82,7 @@ class utility(commands.Cog):
         await ctx.reply(f"posted to {channel.mention}!\nlink: `{msg.jump_url}` ({msg.jump_url})", ephemeral=True)
     @commands.has_permissions(manage_messages=True)
     @status.command(name="add", description="add an event to a status.")
-    async def add(self, ctx, link: str, content: str, ping: bool = False):
+    async def add(self, ctx: commands.Context, link: str, content: str, ping: bool = False):
         parsed = parse_msglink(link)
         if not parsed:
             await ctx.reply("invalid link", ephemeral=True)
@@ -132,7 +132,7 @@ class utility(commands.Cog):
         await ctx.reply("updated!", ephemeral=True)
     @commands.has_permissions(manage_messages=True)
     @status.command(name="close", description="resolve status event.")
-    async def add(self, ctx, link: str, color_override: bool = True, ping: bool = True):
+    async def add(self, ctx: commands.Context, link: str, color_override: bool = True, ping: bool = True):
         parsed = parse_msglink(link)
         if not parsed:
             await ctx.reply("invalid link", ephemeral=True)
@@ -176,6 +176,12 @@ class utility(commands.Cog):
         if ping and pingc.strip():
             await channel.send(pingc, reference=msg)
         await ctx.reply("closed!", ephemeral=True)
-
+        
+    # hey, for self-hosted users: #! please dont remove this command
+    # i get it you want your own bot, but i want atleast some credit for this
+    # if you really want your own bot just make one yourself
+    # enjoy using codygen!
+    @commands.command()
+    async def whoami(self, ctx: commands.Context): await ctx.reply("codygen by [tjf1](<https://github.com/tjf1dev/codygen>)")
 async def setup(bot):
     await bot.add_cog(utility(bot))
