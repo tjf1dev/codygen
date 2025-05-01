@@ -137,8 +137,8 @@ class utility(commands.Cog):
         if not parsed:
             await ctx.reply("invalid link", ephemeral=True)
             return
-        self.bot: commands.Bot
         gid, cid, mid = parsed
+        self.bot: commands.Bot
         channel: discord.TextChannel = self.bot.get_channel(cid)
         msg: discord.Message = await channel.fetch_message(mid)
         e = msg.embeds[0]
@@ -154,7 +154,6 @@ class utility(commands.Cog):
         time = now_cest.strftime("%H:%M:%S")
 
         pingc = msg.content
-        
         desc = e.description or ""
             
         odate_match = re.search(r"\[(\d{2}/\d{2}/\d{2}) CEST", desc.splitlines()[0]) if desc else None

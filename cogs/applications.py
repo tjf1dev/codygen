@@ -1,6 +1,6 @@
 from main import *
 from dateutil import parser
-class applications(commands.Cog):
+class Applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Manage server applications, if you have them enabled."
@@ -69,4 +69,4 @@ class applications(commands.Cog):
         await ctx.reply(embeds=[e1,e2,e3])
         
 async def setup(bot):
-    await bot.add_cog(applications(bot))
+    await bot.add_cog(Applications(bot))
