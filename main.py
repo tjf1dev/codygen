@@ -38,7 +38,7 @@ async def get_guild_config(guild_id: str | int) -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 # example
-# set_guild_config_key(123456789, "settings.prefix", "!")
+# await set_guild_config_key(123456789, "settings.prefix", "!")
 async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
     config = await get_guild_config(guild_id)
     
@@ -69,16 +69,19 @@ async def get_prefix(bot: commands.Bot = None, message: discord.Message =None) -
     except Exception as e:
         return default_prefix
 
-def custom_api_request(bot: commands.Bot, endpoint:str, method:str=requests.get, auth:bool=True):
+
+async def custom_api_request(bot: commands.Bot, endpoint: str, method: str = aiohttp.ClientSession.get, auth: bool = True):
     url = f"https://discord.com/api/v10{endpoint}"
+    headers = {}
+    
     if auth:
-        headers={
-            "Authorization":f"Bot {TOKEN}"
+        headers = {
+            "Authorization": f"Bot {TOKEN}"
         }
-    else:
-        headers={}
-    req = method(url,headers=headers)
-    return req
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.request(method.__name__, url, headers=headers) as response:
+            return await response.json()
 
 def get_required_env() -> list:
     r = []

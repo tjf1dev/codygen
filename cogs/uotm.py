@@ -37,8 +37,8 @@ class uotm(commands.Cog):
             if c["id"] == user.id:
                 c["votes"] += 1
                 await ctx.send(f"you have voted for {user.name}!",ephemeral=True)
-        set_guild_config_key(ctx.guild.id, f"stats.uotm.candidates", candidates) 
-        set_guild_config_key(ctx.guild.id, f"stats.uotm.users.{ctx.author.id}.vote", user.id)
+        await set_guild_config_key(ctx.guild.id, f"stats.uotm.candidates", candidates) 
+        await set_guild_config_key(ctx.guild.id, f"stats.uotm.users.{ctx.author.id}.vote", user.id)
         return
     @uotm.command(name="apply", description="apply for uotm")
     async def apply(self,ctx):
@@ -57,7 +57,7 @@ class uotm(commands.Cog):
             "id": ctx.author.id,
             "votes": 0,
         })
-        set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
+        await set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
         await ctx.send("you are now candidate for user of the month!",ephemeral=True)
     @uotm.command(name="leave", description="remove yourself from uotm")
     async def leave(self,ctx):
@@ -72,7 +72,7 @@ class uotm(commands.Cog):
         for c in candidates:
             if c["id"] == ctx.author.id:
                 candidates.remove(c)
-                set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
+                await set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
                 await ctx.send("you are no longer a candidate for user of the month!",ephemeral=True)
                 return
     @commands.has_permissions(administrator=True)
@@ -126,8 +126,8 @@ class uotm(commands.Cog):
                 value=f"{count} votes ({percentage:.2f}%)",
                 inline=False
             )
-        set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", {})
-        set_guild_config_key(ctx.guild.id, "stats.uotm.users", {})
+        await set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", {})
+        await set_guild_config_key(ctx.guild.id, "stats.uotm.users", {})
         await ctx.send(embeds=[e,results_embed],ephemeral=False)
     @uotm.command(name="view", description="view current uotm standings")
     async def view(self,ctx):

@@ -57,7 +57,7 @@ class level(commands.Cog):
             
             users = guild_config.get("stats", {}).get("level", {}).get("users", {})
             user_xp = users.get(str(message.author.id), {}).get("xp", 0) 
-            set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", user_xp + xp_per_message)
+            await set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", user_xp + xp_per_message)
             old_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"] - int(xp_per_message))
             new_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"])
             try:
