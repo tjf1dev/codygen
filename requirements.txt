@@ -1,7 +1,8 @@
 requests
 discord.py
 python-dotenv 
-flask
+quart
+aiofiles
 psutil
 asyncio
 colorama

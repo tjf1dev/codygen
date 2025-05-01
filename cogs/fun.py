@@ -52,7 +52,7 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="wokemeter", description="see how WOKE someone is!")
     async def wokemeter(self, ctx, user: discord.User = None):
-        woke = get_guild_config(ctx.guild.id)["commands"]["wokemeter"]
+        woke = await get_guild_config(ctx.guild.id)["commands"]["wokemeter"]
         woke_min = woke["woke_min"]
         woke_max = woke["woke_max"]
         exceptions = woke["exceptions"]

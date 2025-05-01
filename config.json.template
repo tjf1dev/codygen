@@ -4,7 +4,8 @@
 // admins: list of user ids (ints)
 // tip: json does not like comments!
 {
-    "version": "0.12-alpha",
+    "version": "your-desired-version",
+    "default_prefix":">"
     "admins": [
     ],
     "cogs":{

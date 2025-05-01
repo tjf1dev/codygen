@@ -6,14 +6,14 @@
 #
 # feel free to read this terrible code, i am not responsible for any brain damage caused by this.
 # importing the modules
-import discord, os,dotenv, random, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
+import discord, os, aiofiles, dotenv, random, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
 from discord.ext import commands
 from discord import app_commands
 from colorama import Fore 
 
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
-def get_global_config():
+def get_global_config() -> dict:
     """
     Loads config.json, or if it doesn't exist / is invalid JSON,
     writes out DEFAULT_GLOBAL_CONFIG and returns it.
@@ -27,17 +27,20 @@ def get_global_config():
         return DEFAULT_GLOBAL_CONFIG
 
 # pre-init functions
-def get_config_defaults():
+def get_config_defaults() -> dict:
     with open(f"config.json","r") as f:
         return json.load(f)["template"]["guild"]
-def get_guild_config(guild_id):
+
+async def get_guild_config(guild_id: str | int) -> dict:
     try:
-        with open(f"data/guilds/{guild_id}.json", "r") as f:
-            return json.load(f)
+        async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
+            return json.loads(await f.read())
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-def set_guild_config_key(guild_id, key, value):
-    config = get_guild_config(guild_id)
+# example
+# set_guild_config_key(123456789, "settings.prefix", "!")
+async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
+    config = await get_guild_config(guild_id)
     
     keys = key.split(".")
     d = config
@@ -48,26 +51,25 @@ def set_guild_config_key(guild_id, key, value):
     d[keys[-1]] = value
     
     os.makedirs("data/guilds", exist_ok=True)
-    with open(f"data/guilds/{guild_id}.json", "w") as f:
+    async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
         json.dump(config, f, indent=4)
 
-# example
-# set_guild_config_key(123456789, "settings.prefix", "!")
 def state_to_id(state: str) -> str:
     euid = state.split("@")[0]
     return base64.b64decode(euid).decode()
-def get_prefix(bot=None, message=None):
+
+async def get_prefix(bot: commands.Bot = None, message: discord.Message =None) -> str:
+    default_prefix = get_global_config().get("default_prefix", ">")
     try:
-        with open("config.json","r") as f:
-            data = json.load(f)
-            guild = data["guilds"][str(message.guild.id)]
-            prefix = guild["prefix"]["prefix"]
-            if message == None or prefix == None:
-                return "<"
-            return prefix
+        conf = await get_guild_config(message.guild.id)
+        prefix = conf["prefix"]["prefix"]
+        if message == None or prefix == None:
+            return default_prefix
+        return prefix
     except Exception as e:
-        return "<"
-def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
+        return default_prefix
+
+def custom_api_request(bot: commands.Bot, endpoint:str, method:str=requests.get, auth:bool=True):
     url = f"https://discord.com/api/v10{endpoint}"
     if auth:
         headers={
@@ -77,53 +79,15 @@ def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
         headers={}
     req = method(url,headers=headers)
     return req
-# Utility function: recursively update a dictionary with missing keys from a template.
-# def recursive_update(original: dict, template: dict) -> dict:
-#     for key, value in template.items():
-#         if isinstance(value, dict):
-#             original[key] = recursive_update(original.get(key, {}), value)
-#         else:
-#             original.setdefault(key, value)
-#     return original
-# def get_guild_config(guild_id):
-#     try:
-#         with open(f"data/guilds/{guild_id}.json","r") as f:
-#             guild = json.load(f)
-#             return guild
-#     except FileNotFoundError:
-#         return None
-# def set_guild_config_key(guild_id,key,value):
-#     try:
-#         with open(f"data/guilds/{guild_id}.json","r") as f:
-#             guild = json.load(f)
-#             guild[key] = value
-#         with open(f"data/guilds/{guild_id}.json","w") as f:
-#             json.dump(guild,f,indent=4)
-#             return True
-#     except FileNotFoundError:
-#         return False
-# def get_global_config():
-#     try:
-#         with open("config.json", "r") as f:
-#             data = json.load(f)
-#             return data
-#     except FileNotFoundError:
-#         return None
-# def get_config_defaults(type="guild"):
-#     with open("config.json","r") as f:
-#         data = json.load(f)
-#         if type == "guild":   
-#             return data["template"]["guild"]
-#     return None
 
-# Required .env configurations
-def get_required_env():
+def get_required_env() -> list:
     r = []
     with open(".env.template","r") as f:
         lines = f.readlines()
         for l in lines:
             r.append(l.split("=")[0])
     return r
+
 REQUIRED_ENV = get_required_env()
 
 def ensure_env():
@@ -388,7 +352,7 @@ def verify():
     async def predicate(ctx):
         # if ctx.guild is None:
         #     return True
-        # prefix_enabled = get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
+        # prefix_enabled = await get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
         # if prefix_enabled == None:
         #     prefix_enabled == False
         # if ctx.interaction is not None:
@@ -396,8 +360,8 @@ def verify():
         # return prefix_enabled
         return True # fuck off
     return commands.check(predicate)
-def verify_alt(guild_id,interaction):
-        prefix_enabled = get_guild_config(guild_id)["prefix"]["prefix_enabled"]
+async def verify_alt(guild_id,interaction):
+        prefix_enabled = await get_guild_config(guild_id)["prefix"]["prefix_enabled"]
         if prefix_enabled == None:
             prefix_enabled == False
         if interaction is not None:
@@ -541,7 +505,7 @@ async def on_ready():
 #         else:
 #             e = discord.Embed(
 #                 title=f"hi! im codygen :3",
-#                 description=f"### try using </help:1338168344506925108>! the prefix for this server is: `{get_guild_config(message.guild.id)["prefix"]["prefix"]}`",
+#                 description=f"### try using </help:1338168344506925108>! the prefix for this server is: `{await get_guild_config(message.guild.id)["prefix"]["prefix"]}`",
 #                 color=0xff00ff
 #             )
 #         await message.reply(embed=e)

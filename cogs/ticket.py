@@ -11,9 +11,9 @@ class ticket(commands.Cog):
     async def create(self,ctx, *, subject:str):
         # check if the config exists and tickets are enabled.
         try:
-            enabled = get_guild_config(ctx.guild.id)["modules"]["ticket"]["enabled"]
-            category = get_guild_config(ctx.guild.id)["modules"]["ticket"]["category"]
-            staff_roles = get_guild_config(ctx.guild.id)["modules"]["ticket"]["staff_roles"]
+            enabled = await get_guild_config(ctx.guild.id)["modules"]["ticket"]["enabled"]
+            category = await get_guild_config(ctx.guild.id)["modules"]["ticket"]["category"]
+            staff_roles = await get_guild_config(ctx.guild.id)["modules"]["ticket"]["staff_roles"]
             if not enabled or category == 0:
                 disabled = discord.Embed(
                     title="Tickets are disabled in this server.",

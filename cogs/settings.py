@@ -142,7 +142,7 @@ class Settings(commands.Cog):
     @commands.has_guild_permissions(administrator=True)
     @settings.command(name="config", description="Change the configurations for your guild. Usage: settings config <key> <value>")
     async def config(self, ctx):
-        config = get_guild_config(ctx.guild.id)
+        config = await get_guild_config(ctx.guild.id)
         path = f"data/guilds/{ctx.guild.id}.json"
         config_patched = {k: v for k, v in config.items() if k != "level"}
         formatted_config = json.dumps(config_patched, indent=4)

@@ -37,7 +37,7 @@ class level(commands.Cog):
             if message.author.bot:
                 return
             user = message.author
-            guild_config = get_guild_config(guild.id)
+            guild_config = await get_guild_config(guild.id)
             per_message_default = get_config_defaults()["modules"]["level"]["per_message"]
             data_path = f"data/guilds/{guild.id}.json"
             xp_per_message = guild_config.get("modules", {}).get("level", {}).get("per_message", per_message_default)
@@ -257,7 +257,7 @@ class level(commands.Cog):
                 level = xp_to_level(xp)
                 # Update user roles based on level
                 guild = ctx.guild
-                guild_config = get_guild_config(guild.id)
+                guild_config = await get_guild_config(guild.id)
 
             with open(data_path, "w") as f:
                 json.dump(data, f, indent=4)

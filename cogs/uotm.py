@@ -13,7 +13,7 @@ class uotm(commands.Cog):
         pass
     @uotm.command(name="vote", description="vote for one of the uotm candidates")
     async def vote(self,ctx, user: discord.User):
-        config = get_guild_config(ctx.guild.id)
+        config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
             return
@@ -42,7 +42,7 @@ class uotm(commands.Cog):
         return
     @uotm.command(name="apply", description="apply for uotm")
     async def apply(self,ctx):
-        config = get_guild_config(ctx.guild.id)
+        config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
             return
@@ -61,7 +61,7 @@ class uotm(commands.Cog):
         await ctx.send("you are now candidate for user of the month!",ephemeral=True)
     @uotm.command(name="leave", description="remove yourself from uotm")
     async def leave(self,ctx):
-        config = get_guild_config(ctx.guild.id)
+        config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
             return
@@ -78,7 +78,7 @@ class uotm(commands.Cog):
     @commands.has_permissions(administrator=True)
     @uotm.command(name="finish", description="wipe uotm votes and finish the current month")
     async def finish(self,ctx):
-        config = get_guild_config(ctx.guild.id)
+        config = await get_guild_config(ctx.guild.id)
         if not config["modules"]["uotm"]["enabled"]:
             await ctx.send("This module is disabled.",ephemeral=True)
             return
@@ -133,7 +133,7 @@ class uotm(commands.Cog):
     async def view(self,ctx):
         # sourced from the og "tjf1" bot :3    
         vote_count = {}
-        candidates = get_guild_config(ctx.guild.id)["stats"]["uotm"]["candidates"]
+        candidates = await get_guild_config(ctx.guild.id)["stats"]["uotm"]["candidates"]
         if candidates in [{},None]:
             await ctx.send("No candidates have been set yet.",ephemeral=True)
             return
