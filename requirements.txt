@@ -1,9 +1,11 @@
 requests
 discord.py
 python-dotenv 
-flask
+quart
+aiofiles
 psutil
 asyncio
 colorama
 jishaku
 pillow
+python-dateutil

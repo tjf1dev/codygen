@@ -6,14 +6,14 @@
 #
 # feel free to read this terrible code, i am not responsible for any brain damage caused by this.
 # importing the modules
-import discord, os,dotenv, random, json, time, flask, psutil, datetime, logging, requests, asyncio,hashlib,io, sys
+import discord, os, aiofiles, dotenv, random, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
 from discord.ext import commands
 from discord import app_commands
 from colorama import Fore 
 
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
-def get_global_config():
+def get_global_config() -> dict:
     """
     Loads config.json, or if it doesn't exist / is invalid JSON,
     writes out DEFAULT_GLOBAL_CONFIG and returns it.
@@ -27,17 +27,20 @@ def get_global_config():
         return DEFAULT_GLOBAL_CONFIG
 
 # pre-init functions
-def get_config_defaults():
+def get_config_defaults() -> dict:
     with open(f"config.json","r") as f:
         return json.load(f)["template"]["guild"]
-def get_guild_config(guild_id):
+
+async def get_guild_config(guild_id: str | int) -> dict:
     try:
-        with open(f"data/guilds/{guild_id}.json", "r") as f:
-            return json.load(f)
+        async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
+            return json.loads(await f.read())
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
-def set_guild_config_key(guild_id, key, value):
-    config = get_guild_config(guild_id)
+# example
+# await set_guild_config_key(123456789, "settings.prefix", "!")
+async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
+    config = await get_guild_config(guild_id)
     
     keys = key.split(".")
     d = config
@@ -48,81 +51,46 @@ def set_guild_config_key(guild_id, key, value):
     d[keys[-1]] = value
     
     os.makedirs("data/guilds", exist_ok=True)
-    with open(f"data/guilds/{guild_id}.json", "w") as f:
+    async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
         json.dump(config, f, indent=4)
 
-# example
-# set_guild_config_key(123456789, "settings.prefix", "!")
 def state_to_id(state: str) -> str:
-    euid = state.split("#")[0]
+    euid = state.split("@")[0]
     return base64.b64decode(euid).decode()
-def get_prefix(bot=None, message=None):
-    try:
-        with open("config.json","r") as f:
-            data = json.load(f)
-            guild = data["guilds"][str(message.guild.id)]
-            prefix = guild["prefix"]["prefix"]
-            if message == None or prefix == None:
-                return ">"
-            return prefix
-    except Exception as e:
-        return ">"
-def custom_api_request(bot,endpoint:str,method:str=requests.get,auth:bool=True):
-    url = f"https://discord.com/api/v10{endpoint}"
-    if auth:
-        headers={
-            "Authorization":f"Bot {TOKEN}"
-        }
-    else:
-        headers={}
-    req = method(url,headers=headers)
-    return req
-# Utility function: recursively update a dictionary with missing keys from a template.
-# def recursive_update(original: dict, template: dict) -> dict:
-#     for key, value in template.items():
-#         if isinstance(value, dict):
-#             original[key] = recursive_update(original.get(key, {}), value)
-#         else:
-#             original.setdefault(key, value)
-#     return original
-# def get_guild_config(guild_id):
-#     try:
-#         with open(f"data/guilds/{guild_id}.json","r") as f:
-#             guild = json.load(f)
-#             return guild
-#     except FileNotFoundError:
-#         return None
-# def set_guild_config_key(guild_id,key,value):
-#     try:
-#         with open(f"data/guilds/{guild_id}.json","r") as f:
-#             guild = json.load(f)
-#             guild[key] = value
-#         with open(f"data/guilds/{guild_id}.json","w") as f:
-#             json.dump(guild,f,indent=4)
-#             return True
-#     except FileNotFoundError:
-#         return False
-# def get_global_config():
-#     try:
-#         with open("config.json", "r") as f:
-#             data = json.load(f)
-#             return data
-#     except FileNotFoundError:
-#         return None
-# def get_config_defaults(type="guild"):
-#     with open("config.json","r") as f:
-#         data = json.load(f)
-#         if type == "guild":   
-#             return data["template"]["guild"]
-#     return None
 
-# Required .env configurations
-def get_required_env():
+async def get_prefix(bot: commands.Bot = None, message: discord.Message =None) -> str:
+    default_prefix = get_global_config().get("default_prefix", ">")
+    try:
+        conf = await get_guild_config(message.guild.id)
+        prefix = conf["prefix"]["prefix"]
+        if message == None or prefix == None:
+            return default_prefix
+        return prefix
+    except Exception as e:
+        return default_prefix
+
+
+async def custom_api_request(bot: commands.Bot, endpoint: str, method: str = aiohttp.ClientSession.get, auth: bool = True):
+    url = f"https://discord.com/api/v10{endpoint}"
+    headers = {}
+    
+    if auth:
+        headers = {
+            "Authorization": f"Bot {TOKEN}"
+        }
+    
+    async with aiohttp.ClientSession() as session:
+        async with session.request(method.__name__, url, headers=headers) as response:
+            return await response.json()
+
+def get_required_env() -> list:
     r = []
     with open(".env.template","r") as f:
         lines = f.readlines()
         for l in lines:
             r.append(l.split("=")[0])
+    return r
+
 REQUIRED_ENV = get_required_env()
 
 def ensure_env():
@@ -132,7 +100,7 @@ def ensure_env():
     then exits with a meaningful message.
     """
     missing = []
-    for key in REQUIRED_ENV.items():
+    for key in REQUIRED_ENV:
         val = os.getenv(key)
         if not val:
             missing.append(key)
@@ -151,60 +119,70 @@ def ensure_env():
 
 
 # flask flask flask flask
-app = flask.Flask("codygen")
+app = ("codygen")
 logger = logging.getLogger(__name__)
 
-app = flask.Flask("codygen")
+app = quart.Quart("codygen")
 
 @app.route("/callback")
-def callback():
-    token = flask.request.args.get("token")
-    state = flask.request.args.get("state")
-    uid = state_to_id(state)
+async def callback():
     try:
-        api_key = os.environ['LASTFM_API_KEY']
-        secret = os.environ['LASTFM_SECRET']
-    except KeyError:
-        logger.error(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
-        output = {
-           "error": "Misconfigured bot configuration",
-           "details": ".env file appears to have missing LASTFM_SECRET and/or LASTFM_API_KEY, contact the bot administrator for more details."
+        logger.debug("received callback")
+        token = quart.request.args.get("token")
+        state = quart.request.args.get("state")
+        uid = state_to_id(state)
+        try:
+            api_key = os.environ['LASTFM_API_KEY']
+            secret = os.environ['LASTFM_SECRET']
+        except KeyError:
+            logger.error(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
+            output = {
+            "error": "Misconfigured bot configuration",
+            "details": ".env file appears to have missing LASTFM_SECRET and/or LASTFM_API_KEY, contact the bot administrator for more details."
+            }
+            return output
+        if not token or not uid:
+            return {"error": "Missing parameters", "details": "Token or state is missing"}
+        params = {
+            'api_key': api_key,
+            'method': 'auth.getSession',
+            'token': token
         }
-        return output
-    if not token or not uid:
-        return {"error": "Missing parameters", "details": "Token or user ID is missing"}
-    params = {
-        'api_key': api_key,
-        'method': 'auth.getSession',
-        'token': token
-    }
-    sorted_params = "".join(f"{k}{v}" for k, v in sorted(params.items()))
-    sig_string = sorted_params + secret
-    api_sig = hashlib.md5(sig_string.encode('utf-8')).hexdigest()
-    url = "http://ws.audioscrobbler.com/2.0/"
-    params.update({'api_sig': api_sig, 'format': 'json'})
+        sorted_params = "".join(f"{k}{v}" for k, v in sorted(params.items()))
+        sig_string = sorted_params + secret
+        api_sig = hashlib.md5(sig_string.encode('utf-8')).hexdigest()
+        url = "http://ws.audioscrobbler.com/2.0/"
+        params.update({'api_sig': api_sig, 'format': 'json'})
 
-    r = requests.get(url, params=params)
-    data = r.json()
 
-    logger.info(f"{uid}'s data is {data}")
-    try:
-        with open("data/last.fm/users.json","r") as f:
-            json_data = json.load(f)
-        json_data[uid] = data
-        with open("data/last.fm/users.json","w") as f:
-            json.dump(json_data, f,indent=4)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as resp:
+                data = await resp.json()
+        logger.info(f"{uid}'s data is {data}")
+        try:
+            with open("data/last.fm/users.json","r") as f:
+                json_data = json.load(f)
+            json_data[uid] = data
+            with open("data/last.fm/users.json","w") as f:
+                json.dump(json_data, f,indent=4)
+        except Exception as e:
+            logger.error(f"An error occured while trying to authenticate {uid}: {e}")
+
+        if 'session' in data:
+            user = client.get_user(uid)
+            e = discord.Embed(
+                title="",
+                description="## Authenticated successfully\nYou can now use all of last.fm features!"
+            )
+            user.send(embed=e)
+            return quart.render_template("success.html")
+        else:
+            logger.error(f"Session key missing: {data}")
+            return {"error": "Session key missing", "details": str(data)}
     except Exception as e:
-        logger.error(f"An error occured while trying to authenticate {uid}: {e}")
-
-    if 'session' in data:
-        return flask.render_template("success.html")
-    else:
-        logger.error(f"Session key missing: {data}")
-        return {"error": "Session key missing", "details": str(data)}
-
+        return {"error":"An internal error occured","code":"500","type":str(type(e)),"content":e}
 @app.route("/")
-def root():
+async def root():
     return({"status":"codygen is online"})
 # setup logging
 import logging
@@ -377,7 +355,7 @@ def verify():
     async def predicate(ctx):
         # if ctx.guild is None:
         #     return True
-        # prefix_enabled = get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
+        # prefix_enabled = await get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
         # if prefix_enabled == None:
         #     prefix_enabled == False
         # if ctx.interaction is not None:
@@ -385,8 +363,8 @@ def verify():
         # return prefix_enabled
         return True # fuck off
     return commands.check(predicate)
-def verify_alt(guild_id,interaction):
-        prefix_enabled = get_guild_config(guild_id)["prefix"]["prefix_enabled"]
+async def verify_alt(guild_id,interaction):
+        prefix_enabled = await get_guild_config(guild_id)["prefix"]["prefix_enabled"]
         if prefix_enabled == None:
             prefix_enabled == False
         if interaction is not None:
@@ -530,7 +508,7 @@ async def on_ready():
 #         else:
 #             e = discord.Embed(
 #                 title=f"hi! im codygen :3",
-#                 description=f"### try using </help:1338168344506925108>! the prefix for this server is: `{get_guild_config(message.guild.id)["prefix"]["prefix"]}`",
+#                 description=f"### try using </help:1338168344506925108>! the prefix for this server is: `{await get_guild_config(message.guild.id)["prefix"]["prefix"]}`",
 #                 color=0xff00ff
 #             )
 #         await message.reply(embed=e)
@@ -670,10 +648,15 @@ async def support(ctx,topic:str):
     channel_id = get_global_config()["support"]["channel"]
     channel = await client.fetch_channel(channel_id)
     await channel.send(f"{ctx.author.id}\n{ticket_id}", embed=e2, view=supportReply())
+async def run_quart():
+    await app.run_task(host="0.0.0.0", port=4887)
+
+async def main():
+    await asyncio.gather(
+        run_quart(),
+        client.start(TOKEN)
+    )
+
 if __name__ == "__main__":
     ensure_env()
-    def run_app():
-        app.run("0.0.0.0",port=4887)
-
-    threading.Thread(target=run_app).start()
-    client.run(TOKEN)
+    asyncio.run(main())

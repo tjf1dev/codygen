@@ -1,6 +1,6 @@
 from main import *
 from dateutil import parser
-class applications(commands.Cog):
+class Applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Manage server applications, if you have them enabled."
@@ -11,9 +11,9 @@ class applications(commands.Cog):
     
     @commands.has_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
-    @apps.command(name="view-form",description="View the server's application form. This category is still in development and not supported by our parent library.")
+    @apps.command(name="view-form",description="View the server's application form. This category is still in development")
     async def view_form(self,ctx):
-        req = custom_api_request(self.bot,f"/guilds/{ctx.guild.id}/member-verification",auth=True)
+        req = await custom_api_request(self.bot,f"/guilds/{ctx.guild.id}/member-verification",auth=True)
         if not req.ok:
             fail = discord.Embed(
                 title="failed to fetch information.",
@@ -69,4 +69,4 @@ class applications(commands.Cog):
         await ctx.reply(embeds=[e1,e2,e3])
         
 async def setup(bot):
-    await bot.add_cog(applications(bot))
+    await bot.add_cog(Applications(bot))
