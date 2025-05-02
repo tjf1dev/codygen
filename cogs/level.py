@@ -13,62 +13,86 @@ def _old_xp_to_level(xp):
         xp_needed += increment
     
     return level
-
 def xp_to_level(xp):
     level = 1
-    xp_needed = 20
-    factor = 1.2
-
-    while xp >= xp_needed:
-        xp -= xp_needed
+    while xp >= 75 * (level ** 1.2):
+        xp -= 75 * (level ** 1.2)
         level += 1
-        xp_needed = int(20 + factor * (level ** 2))
-
     return level
-
-
+def boost_value(value, percentage):
+    return value * (1 + percentage / 100)
 class level(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Track and reward users for activity"
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
-            guild = message.guild
-            if message.author.bot:
-                return
-            user = message.author
-            guild_config = await get_guild_config(guild.id)
-            per_message_default = get_config_defaults()["modules"]["level"]["per_message"]
-            data_path = f"data/guilds/{guild.id}.json"
-            xp_per_message = guild_config.get("modules", {}).get("level", {}).get("per_message", per_message_default)
-            channel_id = guild_config.get("modules", {}).get("level", {}).get("levelup", {}).get("channel")
-            if not channel_id:
-                return
-            channel = await self.bot.fetch_channel(channel_id)
-            
-            users = guild_config.get("stats", {}).get("level", {}).get("users", {})
-            user_xp = users.get(str(message.author.id), {}).get("xp", 0) 
-            await set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", user_xp + xp_per_message)
-            old_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"] - int(xp_per_message))
-            new_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"])
-            try:
-                level_roles = guild_config["modules"]["level"]["rewards"]
-                for role_level, role_id in level_roles.items():
-                    role = guild.get_role(role_id)
-                    if role is not None:
-                        if new_level >= int(role_level):
-                            if role not in user.roles:
-                                await user.add_roles(role)
-                        else:
-                            if role in user.roles:
-                                await user.remove_roles(role)
-            except FileNotFoundError:
-                pass
-            if new_level <= old_level:
-                return
-            await channel.send(
-                f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
-            )
+        guild = message.guild
+        if message.author.bot:
+            return
+        logger.debug("test")
+        user = message.author
+        guild_config = await get_guild_config(guild.id)
+        logger.debug("guild config gathered")
+        per_message_default = get_config_defaults()["modules"]["level"]["per_message"]
+        xp_per_message = guild_config.get("modules", {}).get("level", {}).get("per_message", per_message_default)
+        channel_id = guild_config.get("modules", {}).get("level", {}).get("levelup", {}).get("channel")
+        if not channel_id:
+            return
+        channel = await self.bot.fetch_channel(channel_id)
+        
+        users = guild_config.get("stats", {}).get("level", {}).get("users", {})
+        user_xp = users.get(str(message.author.id), {}).get("xp", 0)
+        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+        logger.debug("all boosts gathered")
+        global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
+        if global_boost.get("expires") < time.time():
+            global_boost_value = 0
+        else:
+            global_boost_value = global_boost.get("percentage")
+
+        role_boosts: dict = boosts.get("role", {})
+        user_boosts: dict = boosts.get("user", {})
+        logger.debug("role and user boosts gathered")
+        highest_boost = global_boost_value
+        user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
+        if user_boost["expires"] > time.time():
+            highest_boost = max(highest_boost, user_boost["percentage"])
+        logger.debug("user boost gathered")
+        for role in user.roles:
+            role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
+            if role_boost["expires"] > time.time():
+                highest_boost = max(highest_boost, role_boost["percentage"])
+        logger.debug("role boost gathered")
+        xp_with_boost = xp_per_message * (1 + highest_boost / 100)
+        logger.debug(f"highest boost: {highest_boost}")
+        await set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", int(user_xp + xp_with_boost))
+
+        old_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"] - int(xp_with_boost))
+        new_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"])
+
+        try:
+            level_roles = guild_config["modules"]["level"]["rewards"]
+            for role_level, role_id in level_roles.items():
+                role = guild.get_role(role_id)
+                if role is not None:
+                    if new_level >= int(role_level):
+                        if role not in user.roles:
+                            await user.add_roles(role)
+                    else:
+                        if role in user.roles:
+                            await user.remove_roles(role)
+        except FileNotFoundError:
+            pass
+
+        if new_level <= old_level:
+            return
+
+        await channel.send(
+            f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
+            f"\nxp boost: **{highest_boost}%**!" if highest_boost != 0 else ""
+        )
+
 
 
 
@@ -89,11 +113,8 @@ class level(commands.Cog):
     async def level_get(self, ctx: commands.Context, user:discord.User=None):
         if user==None:
             user = ctx.author
-        data_path = f"data/guilds/{ctx.guild.id}.json"
         try:
-            with open(data_path, "r") as f:
-                data = json.load(f)
-            
+            data = await get_guild_config(ctx.guild.id)
             users = data.get("stats",{}).get("level", {}).get("users", {})
             sorted_users = sorted(users.items(), key=lambda x: x[1].get("xp", 0), reverse=True)
             place_in_leaderboard = next(
@@ -144,10 +165,8 @@ class level(commands.Cog):
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="top", description="View the most active members of the server")
     async def leveltop(self, ctx: commands.Context):
-        data_path = f"data/guilds/{ctx.guild.id}.json"
         try:
-            with open(data_path,"r") as f:
-                data = json.load(f)
+                data = await get_guild_config(ctx.guild.id)
                 users = data.get("stats",{}).get("level", {}).get("users", {})
                 sorted_users = sorted(users.items(), key=lambda x: x[1].get("xp", 0), reverse=True)
                 img = Image.new("RGB", (450, 512), color=(0, 0, 0))

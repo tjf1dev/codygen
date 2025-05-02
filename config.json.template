@@ -30,7 +30,7 @@
     "template": {
         
         "guild": {
-            "config_ver":9,
+            "config_ver":11,
             "stats":{
                 "level":{},
                 "ticket":[],
@@ -47,7 +47,15 @@
                         "enabled":false,
                         "channel":0
                     },
-                    "rewards":{}
+                    "rewards":{},
+                    "boost":{
+                        "global":{
+                            "percentage":0,
+                            "expires":0
+                        },
+                        "role":{},
+                        "user":{}
+                    }
                 },
                 "ticket":{
                     "enabled":false,

@@ -1,6 +1,4 @@
 from main import *
-
-
 class admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -50,5 +48,6 @@ class admin(commands.Cog):
                 await ctx.reply("done")
         except Exception as e:
             await ctx.reply(f"error: {str(e)}")
+
 async def setup(bot):
     await bot.add_cog(admin(bot))

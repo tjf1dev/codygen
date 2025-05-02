@@ -87,7 +87,7 @@ class InitHomeView(discord.ui.View):
         stage2 = discord.Embed(
             title="Initialization Finished!",
             description="No errors found",
-            color=0x00ff00
+            color=Color.positive
         )
         stage2.add_field(
             name="Tests Passed",
@@ -125,7 +125,7 @@ class Settings(commands.Cog):
                 f"path to your config file: `{path}`\n"
                 f"current config: ```json\n{formatted_config}```\nmodify it using commands in /settings."
             ),
-            color=0xf1f1f1
+            color=Color.white
         )
         await ctx.reply(embed=embed, ephemeral=True)
 
@@ -145,10 +145,27 @@ class Settings(commands.Cog):
         )
         await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
     @commands.has_guild_permissions(administrator=True)
+    @app_commands.describe(prefix="The new prefix to set")
     @settings.command(name="prefix", description="View the current prefix and change it.")
-    async def prefix(self, ctx: commands.Context):
-        prefix = await get_prefix(self.bot, ctx)
-        e = discord.Embed()
+    async def prefix(self, ctx: commands.Context, prefix: str = None):
+        old = await get_prefix(self.bot, ctx)
+        
+        e = discord.Embed(title="", description="# prefix\n" f"the current prefix in this server is: `{old}`", color=Color.white)
+        fail = discord.Embed(title="", description="## something went wrong\ncodygen couldn't change your prefix. try again or contact us", color=Color.negative)
+        e2 = discord.Embed(title="", description=f"# prefix\nprefix updated to: `{prefix}`", color=Color.positive)
+        
+        if not prefix:
+            await ctx.reply(embed=e, mention_author=False)
+            return
+        
+        c = await set_guild_config_key(ctx.guild.id, "prefix.prefix", prefix)
+        
+        if not c:
+            await ctx.reply(embed=fail, mention_author=False)
+            return
+        await ctx.reply(embed=e2)
+        
+            
 async def setup(bot):
     await bot.add_cog(Settings(bot))
 
