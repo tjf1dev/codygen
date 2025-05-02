@@ -75,7 +75,7 @@ class level(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
-    @verify()
+
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @app_commands.allowed_installs(guilds=True,users=False)
     @commands.hybrid_group(name="level", description="Track and reward users for activity")
@@ -83,7 +83,7 @@ class level(commands.Cog):
         pass
     #* writing code can be painful sometimes
     # this hurts
-    @verify()
+
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="get", description="Check your current level.")
     async def level_get(self, ctx: commands.Context, user:discord.User=None):
@@ -140,7 +140,7 @@ class level(commands.Cog):
             await ctx.reply("guild config not found. please report this to the administrators. (/settings init)")
         except FileNotFoundError:
             await ctx.reply("guild config not found. please report this to the administrators. (/settings init)")
-    @verify()
+
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="top", description="View the most active members of the server")
     async def leveltop(self, ctx: commands.Context):
