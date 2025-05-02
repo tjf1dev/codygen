@@ -58,7 +58,8 @@ async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
 
     os.makedirs("data/guilds", exist_ok=True)
     async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
-        json.dump(config, f, indent=4)
+        await f.write(json.dumps(config, indent=4))
+
 
 def state_to_id(state: str) -> str:
     euid = state.split("@")[0]

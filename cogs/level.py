@@ -1,7 +1,25 @@
 from main import *
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import traceback
+def split_embed_description(lines, max_length=4096):
+    chunks = []
+    current = []
+    current_len = 0
 
+    for line in lines:
+        line_len = len(line) + 1  # +1 for newline
+        if current_len + line_len > max_length:
+            chunks.append("\n".join(current))
+            current = [line]
+            current_len = line_len
+        else:
+            current.append(line)
+            current_len += line_len
+
+    if current:
+        chunks.append("\n".join(current))
+
+    return chunks
 def _old_xp_to_level(xp):
     level = 1
     xp_needed = 100
@@ -15,8 +33,8 @@ def _old_xp_to_level(xp):
     return level
 def xp_to_level(xp):
     level = 1
-    while xp >= 75 * (level ** 1.2):
-        xp -= 75 * (level ** 1.2)
+    while xp >= 75 * (level ** 1.15):
+        xp -= 75 * (level ** 1.15)
         level += 1
     return level
 def boost_value(value, percentage):
@@ -243,13 +261,14 @@ class level(commands.Cog):
         except FileNotFoundError:
             await ctx.reply("guild config not found. please report this to the administrators. (/settings init)")
     @verify()
-    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
-    @level.command(name="refresh",description="synchronizes all levels and grants role rewards. administrator only")
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @level.command(name="refresh", description="synchronizes all levels and grants role rewards. administrator only")
     async def levelrefresh(self, ctx: commands.Context):
         start_time = time.time()
         if not ctx.author.guild_permissions.administrator:
-            await ctx.reply("You do not have permission to use this command.")
+            await ctx.reply("you do not have permission to use this command.")
             return
+
         total_users = len(ctx.guild.members)
         estimated_time = (total_users * 0.1) * 2
         await ctx.reply(f"levels/roles refresh started. the results will be sent soon. estimated time: {estimated_time:.1f} seconds.", ephemeral=False)
@@ -258,53 +277,58 @@ class level(commands.Cog):
         try:
             with open(data_path, "r") as f:
                 data = json.load(f)
-            
-            users = data.get("stats",{}).get("level", {}).get("users", {})
-            for user_id, user_data in users.items():
-                guild = ctx.guild
-                user = guild.get_member(int(user_id))
-                xp = user_data.get("xp", 0)
-                level = xp_to_level(xp)
-                # Update user roles based on level
-                guild = ctx.guild
-                guild_config = await get_guild_config(guild.id)
 
-            with open(data_path, "w") as f:
-                json.dump(data, f, indent=4)
+            users = data.get("stats", {}).get("level", {}).get("users", {})
+            guild = ctx.guild
+            guild_config = await get_guild_config(guild.id)
             affected_users = []
+
             for user_id, user_data in users.items():
                 user = guild.get_member(int(user_id))
                 if user is None:
                     continue
                 xp = user_data.get("xp", 0)
                 level = xp_to_level(xp)
-                # Update user roles based on level
                 level_roles = guild_config["modules"]["level"]["rewards"]
                 for role_level, role_id in level_roles.items():
                     role = guild.get_role(role_id)
-                    if role is not None:
+                    if role:
                         if level >= int(role_level):
                             if role not in user.roles:
                                 await user.add_roles(role)
-                                affected_users.append(f"{user.mention} ({level} • {xp}xp) - Added role <@&{role.id}>")
+                                affected_users.append(f"{user.mention} ({level} • {xp}xp) - added role <@&{role.id}>")
                         else:
                             if role in user.roles:
                                 await user.remove_roles(role)
-                                affected_users.append(f"{user.mention} ({level} • {xp}xp) - Removed role <@&{role.id}>")
-                end_time = time.time()
-                elapsed_time = end_time - start_time
+                                affected_users.append(f"{user.mention} ({level} • {xp}xp) - removed role <@&{role.id}>")
 
-                e = discord.Embed(
-                    title="Leveling refresh complete",
-                    description=f"## Users affected:\n" + "\n".join(affected_users) if affected_users else "No changes were made.",
+            with open(data_path, "w") as f:
+                json.dump(data, f, indent=4)
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            time_difference = elapsed_time - estimated_time
+            time_diff_sign = "+" if time_difference > 0 else "-"
+
+            if not affected_users:
+                await ctx.reply("no changes were made.")
+                return
+
+            chunks = split_embed_description(affected_users)
+            for i, chunk in enumerate(chunks):
+                embed = discord.Embed(
+                    description="## users affected:\n" + chunk,
                     color=Color.white
                 )
-                time_difference = elapsed_time - estimated_time
-                time_diff_sign = "+" if time_difference > 0 else "-"
-                e.add_field(name="time elapsed", value=f"`{elapsed_time:.2f}s ({time_diff_sign}{abs(time_difference):.2f}s from estimate)`")
-            await ctx.reply(embed=e)
-            
+                if i == len(chunks) - 1:
+                    embed.title = "leveling refresh complete"
+                    embed.add_field(
+                        name="time elapsed",
+                        value=f"`{elapsed_time:.2f}s ({time_diff_sign}{abs(time_difference):.2f}s from estimate)`"
+                    )
+                await ctx.send(embed=embed)
+
         except FileNotFoundError:
-            await ctx.reply("Guild config not found. Please report this to the administrators. (/settings init)")
+            await ctx.reply("guild config not found. please report this to the administrators. (/settings init)")
 async def setup(bot):
     await bot.add_cog(level(bot))
