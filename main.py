@@ -41,8 +41,13 @@ async def get_guild_config(guild_id: str | int) -> dict:
 # example
 # await set_guild_config_key(123456789, "settings.prefix", "!")
 async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
-    config = await get_guild_config(guild_id)
-    
+    try:
+        async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
+            config = json.loads(await f.read())
+    except (FileNotFoundError, json.JSONDecodeError):
+        config = get_config_defaults()
+
+
     keys = key.split(".")
     d = config
     for k in keys[:-1]:
@@ -50,10 +55,10 @@ async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
             d[k] = {}
         d = d[k]
     d[keys[-1]] = value
-    
+
     os.makedirs("data/guilds", exist_ok=True)
     async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
-        json.dump(config, f, indent=4)
+        await f.write(json.dumps(config, indent=4))
 
 def state_to_id(state: str) -> str:
     euid = state.split("@")[0]
