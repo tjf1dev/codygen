@@ -39,7 +39,7 @@ async def get_guild_config(guild_id: str | int) -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 # example
-# await set_guild_config_key(123456789, "settings.prefix", "!")
+# await set_guild_config_key(1234567890123456, "settings.prefix", "!")
 async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
     try:
         async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
@@ -58,7 +58,7 @@ async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
 
     os.makedirs("data/guilds", exist_ok=True)
     async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
-        await f.write(json.dumps(config, indent=4))
+        json.dump(config, f, indent=4)
 
 def state_to_id(state: str) -> str:
     euid = state.split("@")[0]
@@ -315,9 +315,10 @@ class HelpSelect(discord.ui.Select):
             await interaction.response.edit_message(embed=fail)
         else:
             for command in cog.walk_commands():
+                description = command.description if command.description is not "" else "Figure it out yourself (no description provided)"
                 embed.add_field(
                     name=command.name,
-                    value=f"```{command.description}```",
+                    value=f"```{description}```",
                     inline=False
                 )
             await interaction.response.edit_message(embed=embed,view=HelpHomeView(client))
@@ -363,17 +364,22 @@ class SupportModal(discord.ui.Modal, title='Reply to Support Ticket'):
 # events
 def verify():
     """
-    checks for certain things that could not allow a command to send
+    Checks for certain things that could prevent a command from sending
     """
     async def predicate(ctx: commands.Context):
         if ctx.guild is None:
             return True
-        prefix_enabled = await get_guild_config(ctx.guild.id)["prefix"]["prefix_enabled"]
-        if prefix_enabled == None:
-            prefix_enabled == False
+        config = await get_guild_config(ctx.guild.id)
+        prefix_enabled = config.get("prefix", {}).get("prefix_enabled", False)
+
+        if prefix_enabled is None:
+            prefix_enabled = False
+        
         if ctx.interaction is not None:
             return True
+        
         return prefix_enabled
+
     return commands.check(predicate)
 async def verify_alt(guild_id,interaction) -> bool:
     """
@@ -507,8 +513,44 @@ async def on_ready():
                 await client.load_extension(f"cogs.{cog_name}")
             except asyncio.TimeoutError:
                 print(f"Timeout while loading {cog_name}")
+    admin_cog = client.get_cog("admin")
+    admin_group = admin_cog.admin
+    @commands.is_owner()
+    @admin_group.command(name="sync",description="syncs app commands")
+    async def sync(ctx: commands.Context, flags:str = None): 
+        # get it flagl because flags and the s is string and l is list hahaha
+        flagl = list(flags.strip("-"))
+        e = discord.Embed(
+            title=f"successfully synced {len(tree.get_commands())} commands for all guilds!",
+            color=Color.positive
+        )
+        e1 = discord.Embed(
+            title=f"successfully synced {len(tree.get_commands())} commands for this guild!",
+            color=Color.positive
+        )
+        # used for when you want to sync globally but still have the guild first
+        e2 = discord.Embed(
+            title=f"successfully synced {len(tree.get_commands())} commands for this guild and all guilds!",
+            color=Color.positive            
+        )
+        embed: discord.Embed
+        if "g" in flagl:
+            embed = e
+            await tree.sync()
+            logger.info("syncing global")
+        elif "g" in flagl and "a" in flagl:
+            embed = e2
+            await tree.sync(guild=ctx.guild)
+            await tree.sync()
+            logger.info("syncing guild and global")
+        else:
+            embed = e1
+            await tree.sync(guild=ctx.guild)
+            logger.info("syncing guild")
+        await ctx.reply(embed=embed, ephemeral=True, mention_author=False)
     logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
     start_time = time.time()
+
 # @client.event
 # async def on_message(message):
 #     if message.author.bot:
@@ -601,22 +643,6 @@ async def ping(ctx: commands.Context):
     )    
     await ctx.reply(embed=e,ephemeral=False)
 @verify()
-@commands.is_owner()
-@client.hybrid_command(name="sync",description="syncs app commands")
-async def sync(ctx: commands.Context, *, flags=None): 
-    if flags == "-g":
-        success = discord.Embed(
-            title=f"successfully synced {len(tree.get_commands())} commands for all guilds!",
-            color=Color.positive
-        )
-        await tree.sync()
-    else:
-        success = discord.Embed(
-            title=f"successfully synced {len(tree.get_commands())} commands for this guild!",
-            color=Color.positive
-        )
-        await tree.sync(guild=await client.fetch_guild(1333785291584180244))
-    await ctx.reply(embed=success,ephemeral=True,mention_author=False)
 @client.hybrid_command(
     name="help",
     description="shows useful info about the bot."
@@ -663,6 +689,8 @@ async def support(ctx: commands.Context,topic:str):
     channel_id = get_global_config()["support"]["channel"]
     channel = await client.fetch_channel(channel_id)
     await channel.send(f"{ctx.author.id}\n{ticket_id}", embed=e2, view=supportReply())
+
+
 async def run_quart():
     await app.run_task(host="0.0.0.0", port=4887)
 

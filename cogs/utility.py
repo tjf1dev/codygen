@@ -177,11 +177,13 @@ class utility(commands.Cog):
             await channel.send(pingc, reference=msg)
         await ctx.reply("closed!", ephemeral=True)
         
-    # hey, for self-hosted users: #! please dont remove this command
-    # i get it you want your own bot, but i want atleast some credit for this
-    # if you really want your own bot just make one yourself
+    # hey, for self-hosted users: #! please don’t remove this command
+    # i get it, you want your own bot, but at least give me some credit for this
+    # if you really want your own bot, make one yourself
+    # tip: codygen works under the MIT license. #* REMOVING CREDIT IS ILLEGAL.
+    # you can do whatever you want with it, but #* if you redistribute this code without credit, you’re BREAKING THE LAW.
     # enjoy using codygen!
     @commands.command()
-    async def whoami(self, ctx: commands.Context): await ctx.reply("codygen by [tjf1](<https://github.com/tjf1dev/codygen>)")
+    async def whoami(self, ctx: commands.Context): await ctx.reply(embed=discord.Embed(title="",description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing — it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command (cog utility.py, line 180)",color=Color.negative))
 async def setup(bot):
     await bot.add_cog(utility(bot))
