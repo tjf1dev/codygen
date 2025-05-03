@@ -1,7 +1,8 @@
 from main import *
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import traceback
-def split_embed_description(lines, max_length=4096):
+
+def split_embed_description(lines, max_length=4096) -> list:
     chunks = []
     current = []
     current_len = 0
@@ -20,6 +21,7 @@ def split_embed_description(lines, max_length=4096):
         chunks.append("\n".join(current))
 
     return chunks
+
 def _old_xp_to_level(xp):
     level = 1
     xp_needed = 100
@@ -31,14 +33,98 @@ def _old_xp_to_level(xp):
         xp_needed += increment
     
     return level
-def xp_to_level(xp):
+    
+def xp_to_level(xp) -> int:
     level = 1
     while xp >= 75 * (level ** 1.15):
         xp -= 75 * (level ** 1.15)
         level += 1
     return level
-def boost_value(value, percentage):
+
+def boost_value(value, percentage) -> int:
     return value * (1 + percentage / 100)
+
+def timestamp(unix: int | str, type: str, infinite_msg: str = "infinite") -> str:
+    """
+        Generates a Discord timestamp out of a Unix timestamp.
+        -1 for infinite
+    """
+    if unix == -1:
+        return infinite_msg 
+    return f"<t:{unix}" + f":{type}>" if type else ">"
+class ConfirmBoost(discord.ui.View):
+    def __init__(self, author: discord.User, type: int, percentage: int, expires: int, confirm: int = 0, id: int = 0):
+        super().__init__(timeout=30)
+        self.author = author
+        self.type = type
+        self.percentage = percentage
+        self.expires = expires
+        self.confirm = confirm 
+        self.id = id
+        confirm_name = "Confirm"
+        if confirm == 1:
+            confirm_name = "Replace"
+        self.confirm_button = discord.ui.Button(label=confirm_name, style=discord.ButtonStyle.danger)
+        self.confirm_button.callback = self.replace_button
+        self.add_item(self.confirm_button)
+        abort_button = discord.ui.Button(label="Abort", style=discord.ButtonStyle.secondary)
+        abort_button.callback = self.abort_button
+        self.add_item(abort_button)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.author.id:
+            await interaction.response.send_message("you're not allowed to use this", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        try:
+            timeout = discord.Embed(
+                title="timed out.",
+                color=Color.gray
+            )
+            await self.message.edit(view=self,embed=timeout)
+        except:
+            pass
+
+    async def replace_button(self, interaction: discord.Interaction):
+        global_success_new = discord.Embed(
+            title="success",
+            description=f"### a **{self.percentage}%** global boost is now active!\nexpires {timestamp(self.expires,"R","never")}: {timestamp(self.expires,"f")} (`{self.expires}`)",
+            color=Color.green
+        )
+        global_success_delete = discord.Embed(
+            title="success",
+            description=f"### all global boosts have been disabled",
+            color=Color.green
+        )
+        global_success_replace = discord.Embed(
+            title="success",
+            description=f"### an old global boost has been replaced with a **{self.percentage}%** boost!\nexpires: {timestamp(self.expires,"R","never")}: {timestamp(self.expires,"f")} (`{self.expires}`)",
+            color=Color.green
+        )
+        if self.type == 0:
+            if self.confirm == 1:
+                embed = global_success_replace
+            else:
+                embed = global_success_new
+            if self.percentage == 0:
+                embed = global_success_delete
+            await set_guild_config_key(interaction.guild.id, "modules.level.boost.global.percentage", self.percentage)
+            await set_guild_config_key(interaction.guild.id, "modules.level.boost.global.expires", self.expires)
+        elif self.type == 1:
+            await set_guild_config_key(interaction.guild.id, f"modules.level.boost.role.{self.id}.percentage", self.percentage)
+            await set_guild_config_key(interaction.guild.id, f"modules.level.boost.role.{self.id}.expires", self.expires)
+        elif self.type == 2:
+            await set_guild_config_key(interaction.guild.id, f"modules.level.boost.user.{self.id}.percentage", self.percentage)
+            await set_guild_config_key(interaction.guild.id, f"modules.level.boost.user.{self.id}.expires", self.expires)
+
+        await interaction.response.edit_message(embed=embed,view=None)
+
+    async def abort_button(self, interaction: discord.Interaction):
+        await interaction.response.send_message(f"action cancelled.", ephemeral=True)
 class level(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -64,7 +150,7 @@ class level(commands.Cog):
         boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
         logger.debug("all boosts gathered")
         global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
-        if global_boost.get("expires") < time.time():
+        if float(global_boost.get("expires")) < time.time():
             global_boost_value = 0
         else:
             global_boost_value = global_boost.get("percentage")
@@ -81,6 +167,7 @@ class level(commands.Cog):
             role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
             if role_boost["expires"] > time.time():
                 highest_boost = max(highest_boost, role_boost["percentage"])
+        highest_boost = global_boost_value + user_boost.get("percentage") + role_boost.get("percentage")
         logger.debug("role boost gathered")
         xp_with_boost = xp_per_message * (1 + highest_boost / 100)
         logger.debug(f"highest boost: {highest_boost}")
@@ -125,7 +212,275 @@ class level(commands.Cog):
         pass
     #* writing code can be painful sometimes
     # this hurts
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
+    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+    @level.group(name="boost", description="manage xp boosts")
+    async def boost(self, ctx: commands.Context):
+        pass
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @level.command(name="boosts", description="view your active boosts")
+    async def boosts(self, ctx: commands.Context):
+        guild_config = await get_guild_config(ctx.guild.id)
+        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+        logger.debug("all boosts gathered")
 
+        highest_boost_value = 0
+        highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
+
+        global_boost = boosts.get("global", {"percentage": 0, "expires": 0})
+        if global_boost["expires"] > time.time():
+            highest_boost_value = global_boost["percentage"]
+            highest_boost_type = 0
+
+        role_boosts: dict = boosts.get("role", {})
+        user_boosts: dict = boosts.get("user", {})
+        logger.debug("role and user boosts gathered")
+
+        for role in ctx.author.roles:
+            role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
+            if role_boost["expires"] > time.time() and role_boost["percentage"] > highest_boost_value:
+                highest_boost_value = role_boost["percentage"]
+                highest_boost_type = 1
+
+        user_boost = user_boosts.get(str(ctx.author.id), {"expires": 0, "percentage": 0})
+        if user_boost["expires"] > time.time() and user_boost["percentage"] > highest_boost_value:
+            highest_boost_value = user_boost["percentage"]
+            highest_boost_type = 2
+
+        boost_data = [
+            ("🌐 global", global_boost),
+            ("🏷️ role", role_boost),
+            ("👤 user", user_boost),
+        ]
+
+        active_boosts = []
+        inactive_boosts = []
+        total = 0
+
+        for name, data in boost_data:
+            percent = data.get("percentage", 0)
+            expires = data.get("expires", 0)
+            if expires > time.time():
+                active_boosts.append((percent, f"{name}: **`{percent}%`**\n-# expires {timestamp(expires, 'R')}\n"))
+                total += percent
+            else:
+                inactive_boosts.append((0, f"-# {name}: inactive"))
+
+        active_boosts.sort(key=lambda x: x[0], reverse=True)
+        all_boosts = active_boosts + inactive_boosts
+
+        lines = [b[1] for b in all_boosts]
+        if total > 0:
+            lines.append(f"### total: **`{total}%`**")
+            header = "## active boosts\n"
+        else:
+            header = "## no boosts active.\n"
+
+        description = header + "\n".join(lines)
+        e = discord.Embed(title="", description=description, color=Color.lblue)
+
+        await ctx.reply(embed=e, mention_author=False)
+
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
+    @app_commands.describe(percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts", 
+                           expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'."
+                           )
+    @boost.command(name="global", description="change the global boost")
+    async def boost_global(self, ctx: commands.Context, percentage: int, expires: int):
+        guild_config = await get_guild_config(ctx.guild.id)
+        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+        global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
+        exists = False
+        if global_boost["expires"] > time.time() and global_boost["percentage"] > 0:
+            exists = True
+        fail_single = discord.Embed( title="", color=Color.negative,
+            description="### an error occured, please review it"
+        )
+        fail_multiple = discord.Embed( title="", color=Color.negative,
+            description="### errors occured, please review them"
+        )
+        fail_invalid_timestamp = discord.Embed( title="", color=Color.negative,
+            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)"
+        )
+        fail_invalid_percentage = discord.Embed( title="", color=Color.negative,
+            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)"
+        )
+        neutral_disable = discord.Embed( title="",color=Color.lyellow,
+            description="### `percentage` of 0 will disable every boost. are you sure?",      
+        )
+        neutral_already_exists = discord.Embed( title="",color=Color.lyellow,
+            description=f"### already exists\nOLD: **{global_boost["percentage"]}%** (until {global_boost["expires"]})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+        )
+        neutral_confirm = discord.Embed( title="",color=Color.lgreen,
+            description=f"### almost done!\nnow please confirm to apply the {global_boost["percentage"]}% global boost.\nwill expire in {timestamp(global_boost["expires"],"R")}",      
+        )
+        neutral_infinite_already_exists = discord.Embed( title="",color=Color.lyellow,
+            description=f"### already exists\nOLD: **{global_boost["percentage"]}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+        )
+        neutral_infinite_confirm = discord.Embed( title="",color=Color.lgreen,
+            description=f"### almost done!\nnow please confirm to apply the {global_boost["percentage"]}% global boost.\nwill not expire.",      
+        )
+        
+        embeds = []
+        fail = False
+        confirm = 1 if exists else 0
+        view = ConfirmBoost(ctx.author, 0, percentage, expires, confirm, 0)
+        if percentage == 0:
+            await ctx.reply(embed=neutral_disable, view=view)
+            return 
+        if expires < time.time() and expires != -1:
+            fail = True
+            embeds.append(fail_invalid_timestamp)
+        if percentage > 999999999999:# percentage <= -1:
+            fail = True
+            embeds.append(fail_invalid_percentage) 
+        if fail:
+            if len(embeds) == 1:
+                embeds.insert(0, fail_single)
+            else:
+                embeds.insert(0, fail_multiple)
+            await ctx.reply(embeds=embeds, mention_author=False)
+            return
+        if exists:
+            await ctx.reply(embed=neutral_already_exists, view=view)
+            return
+        await ctx.reply(embed=neutral_confirm, view=view)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
+    @app_commands.describe(percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts", 
+                           expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'."
+                           )
+    @boost.command(name="user", description="change a user's boost")
+    async def boost_user(self, ctx: commands.Context, user: discord.Member, percentage: int, expires: int):
+        guild_config = await get_guild_config(ctx.guild.id)
+        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+        user_boosts: dict = boosts.get("user", {})
+        user_boost: dict = user_boosts.get(str(user.id), {"expires":0, "percentage":0})
+        exists = False
+        if user_boost["expires"] > time.time() and user_boost["percentage"] > 0:
+            exists = True
+        fail_single = discord.Embed( title="", color=Color.negative,
+            description="### an error occured, please review it"
+        )
+        fail_multiple = discord.Embed( title="", color=Color.negative,
+            description="### errors occured, please review them"
+        )
+        fail_invalid_timestamp = discord.Embed( title="", color=Color.negative,
+            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)"
+        )
+        fail_invalid_percentage = discord.Embed( title="", color=Color.negative,
+            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)"
+        )
+        neutral_disable = discord.Embed( title="",color=Color.lyellow,
+            description=f"### successfully disabled {user.mention}'s boost.",      
+        )
+        success_replaced = discord.Embed( title="",color=Color.lgreen,
+            description=f"### successfully replaces!\nOLD: **{user_boost["percentage"]}%** (until {user_boost["expires"]}:f>)\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",      
+        )
+        success_done = discord.Embed( title="",color=Color.lgreen,
+            description=f"### success\n{user.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",      
+        )
+        neutral_infinite_already_exists = discord.Embed( title="",color=Color.lyellow,
+            description=f"### already exists\nOLD: **{user_boost["percentage"]}%** (until {timestamp(user_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+        )
+        neutral_infinite_confirm = discord.Embed( title="",color=Color.lgreen,
+            description=f"### almost done!\nnow please confirm to apply the {user_boost["percentage"]}% global boost.\nwill not expire.",      
+        )
+        
+        embeds = []
+        fail = False
+        confirm = 1 if exists else 0
+        if percentage == 0:
+            await ctx.reply(embed=neutral_disable)
+            return 
+        if expires < time.time() and expires != -1:
+            fail = True
+            embeds.append(fail_invalid_timestamp)
+        if percentage > 999999999999:# percentage <= -1:
+            fail = True
+            embeds.append(fail_invalid_percentage) 
+        if fail:
+            if len(embeds) == 1:
+                embeds.insert(0, fail_single)
+            else:
+                embeds.insert(0, fail_multiple)
+            await ctx.reply(embeds=embeds, mention_author=False)
+            return
+        if exists:
+            await ctx.reply(embed=success_replaced)
+            return
+        await ctx.reply(embed=success_done)
+        await set_guild_config_key(ctx.guild.id, f"modules.level.boost.user.{user.id}.percentage", percentage)
+        await set_guild_config_key(ctx.guild.id, f"modules.level.boost.user.{user.id}.expires", expires)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_permissions(administrator=True)
+    @app_commands.describe(percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts", 
+                           expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'."
+                           )
+    @boost.command(name="role", description="change a role's boost")
+    async def boost_role(self, ctx: commands.Context, role: discord.Role, percentage: int, expires: int):
+        guild_config = await get_guild_config(ctx.guild.id)
+        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+        role_boosts: dict = boosts.get("role", {})
+        role_boost: dict = role_boosts.get(str(role.id), {"expires":0, "percentage":0})
+        exists = False
+        if role_boost["expires"] > time.time() and role_boost["percentage"] > 0:
+            exists = True
+        fail_single = discord.Embed( title="", color=Color.negative,
+            description="### an error occured, please review it"
+        )
+        fail_multiple = discord.Embed( title="", color=Color.negative,
+            description="### errors occured, please review them"
+        )
+        fail_invalid_timestamp = discord.Embed( title="", color=Color.negative,
+            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)"
+        )
+        fail_invalid_percentage = discord.Embed( title="", color=Color.negative,
+            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)"
+        )
+        neutral_disable = discord.Embed( title="",color=Color.lyellow,
+            description=f"### successfully disabled {role.mention}'s boost.",      
+        )
+        success_replaced = discord.Embed( title="",color=Color.lgreen,
+            description=f"### successfully replaces!\nOLD: **{role_boost["percentage"]}%** (until {role_boost["expires"]})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",      
+        )
+        success_done = discord.Embed( title="",color=Color.lgreen,
+            description=f"### success\n{role.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",      
+        )
+        neutral_infinite_already_exists = discord.Embed( title="",color=Color.lyellow,
+            description=f"### already exists\nOLD: **{role_boost["percentage"]}%** (until {timestamp(role_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+        )
+        neutral_infinite_confirm = discord.Embed( title="",color=Color.lgreen,
+            description=f"### almost done!\nnow please confirm to apply the {role_boost["percentage"]}% global boost.\nwill not expire.",      
+        )
+        
+        embeds = []
+        fail = False
+        confirm = 1 if exists else 0
+        if percentage == 0:
+            await ctx.reply(embed=neutral_disable)
+            return 
+        if expires < time.time() and expires != -1:
+            fail = True
+            embeds.append(fail_invalid_timestamp)
+        if percentage > 999999999999:# or percentage <= -1:
+            fail = True
+            embeds.append(fail_invalid_percentage) 
+        if fail:
+            if len(embeds) == 1:
+                embeds.insert(0, fail_single)
+            else:
+                embeds.insert(0, fail_multiple)
+            await ctx.reply(embeds=embeds, mention_author=False)
+            return
+        if exists:
+            await ctx.reply(embed=success_replaced)
+            return
+        await ctx.reply(embed=success_done)
+        await set_guild_config_key(ctx.guild.id, f"modules.level.boost.role.{role.id}.percentage", percentage)
+        await set_guild_config_key(ctx.guild.id, f"modules.level.boost.role.{role.id}.expires", expires)
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="get", description="Check your current level.")
     async def level_get(self, ctx: commands.Context, user:discord.User=None):
@@ -170,7 +525,6 @@ class level(commands.Cog):
             img.save(img_path)
             guild_config = await get_guild_config(ctx.guild.id)
             boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-            logger.debug("all boosts gathered")
             global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
             if global_boost.get("expires") < time.time():
                 global_boost_value = 0
@@ -179,17 +533,15 @@ class level(commands.Cog):
 
             role_boosts: dict = boosts.get("role", {})
             user_boosts: dict = boosts.get("user", {})
-            logger.debug("role and user boosts gathered")
             highest_boost = global_boost_value
             user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
             if user_boost["expires"] > time.time():
                 highest_boost = max(highest_boost, user_boost["percentage"])
-            logger.debug("user boost gathered")
             for role in user.roles:
                 role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
                 if role_boost["expires"] > time.time():
                     highest_boost = max(highest_boost, role_boost["percentage"])
-                    
+            logger.debug(f"{user.name} ({user.id}) has {xp}, which puts them at level {level}")    
             try:
                 await ctx.reply(content=f"xp boost: **{highest_boost}%**!" if highest_boost else None,file=discord.File(img_path))
             finally:

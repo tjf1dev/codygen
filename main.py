@@ -316,7 +316,7 @@ class HelpSelect(discord.ui.Select):
             await interaction.response.edit_message(embed=fail)
         else:
             for command in cog.walk_commands():
-                description = command.description if command.description is not "" else "Figure it out yourself (no description provided)"
+                description = command.description if command.description != "" else "Figure it out yourself (no description provided)"
                 embed.add_field(
                     name=command.name,
                     value=f"```{description}```",
