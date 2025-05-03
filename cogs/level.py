@@ -92,7 +92,7 @@ class ConfirmBoost(discord.ui.View):
     async def replace_button(self, interaction: discord.Interaction):
         global_success_new = discord.Embed(
             title="success",
-            description=f"### a **{self.percentage}%** global boost is now active!\nexpires {timestamp(self.expires,"R","never")}: {timestamp(self.expires,"f")} (`{self.expires}`)",
+            description=f"### a **{self.percentage}%** global boost is now active!\nexpires {timestamp(self.expires, 'R', 'never')}: {timestamp(self.expires, 'f')} (`{self.expires}`)",
             color=Color.green
         )
         global_success_delete = discord.Embed(
