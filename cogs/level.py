@@ -168,9 +168,30 @@ class level(commands.Cog):
                 os.makedirs("cache",exist_ok=True)
             img_path = f"cache/{ctx.guild.id}_{ctx.author.id}_level.png"
             img.save(img_path)
-            
+            guild_config = await get_guild_config(ctx.guild.id)
+            boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
+            logger.debug("all boosts gathered")
+            global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
+            if global_boost.get("expires") < time.time():
+                global_boost_value = 0
+            else:
+                global_boost_value = global_boost.get("percentage")
+
+            role_boosts: dict = boosts.get("role", {})
+            user_boosts: dict = boosts.get("user", {})
+            logger.debug("role and user boosts gathered")
+            highest_boost = global_boost_value
+            user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
+            if user_boost["expires"] > time.time():
+                highest_boost = max(highest_boost, user_boost["percentage"])
+            logger.debug("user boost gathered")
+            for role in user.roles:
+                role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
+                if role_boost["expires"] > time.time():
+                    highest_boost = max(highest_boost, role_boost["percentage"])
+                    
             try:
-                await ctx.reply(file=discord.File(img_path))
+                await ctx.reply(content=f"xp boost: **{highest_boost}%**!" if highest_boost else None,file=discord.File(img_path))
             finally:
                 if os.path.exists(img_path):
                     os.remove(img_path)
