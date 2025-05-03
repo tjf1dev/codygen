@@ -102,7 +102,7 @@ class ConfirmBoost(discord.ui.View):
         )
         global_success_replace = discord.Embed(
             title="success",
-            description=f"### an old global boost has been replaced with a **{self.percentage}%** boost!\nexpires: {timestamp(self.expires,"R","never")}: {timestamp(self.expires,"f")} (`{self.expires}`)",
+            description=f"### an old global boost has been replaced with a **{self.percentage}%** boost!\nexpires: {timestamp(self.expires, 'R', 'never')}: {timestamp(self.expires,'f')} (`{self.expires}`)",
             color=Color.green
         )
         if self.type == 0:
@@ -311,16 +311,16 @@ class level(commands.Cog):
             description="### `percentage` of 0 will disable every boost. are you sure?",      
         )
         neutral_already_exists = discord.Embed( title="",color=Color.lyellow,
-            description=f"### already exists\nOLD: **{global_boost["percentage"]}%** (until {global_boost["expires"]})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+            description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {global_boost['expires']})\nNEW: **{percentage}%** (until {timestamp(expires, 'f')})\nreplace?",      
         )
         neutral_confirm = discord.Embed( title="",color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {global_boost["percentage"]}% global boost.\nwill expire in {timestamp(global_boost["expires"],"R")}",      
+            description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill expire in {timestamp(global_boost['expires'],"R")}",      
         )
         neutral_infinite_already_exists = discord.Embed( title="",color=Color.lyellow,
-            description=f"### already exists\nOLD: **{global_boost["percentage"]}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
+            description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",      
         )
         neutral_infinite_confirm = discord.Embed( title="",color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {global_boost["percentage"]}% global boost.\nwill not expire.",      
+            description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill not expire.",      
         )
         
         embeds = []
@@ -377,7 +377,7 @@ class level(commands.Cog):
             description=f"### successfully disabled {user.mention}'s boost.",      
         )
         success_replaced = discord.Embed( title="",color=Color.lgreen,
-            description=f"### successfully replaces!\nOLD: **{user_boost["percentage"]}%** (until {user_boost["expires"]}:f>)\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",      
+            description=f"### successfully replaces!\nOLD: **{user_boost['percentage']}%** (until {user_boost["expires"]}:f>)\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",      
         )
         success_done = discord.Embed( title="",color=Color.lgreen,
             description=f"### success\n{user.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",      
