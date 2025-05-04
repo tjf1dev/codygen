@@ -432,7 +432,7 @@ async def on_guild_join(guild):
     )
     e2 = discord.Embed(
         title="codygen will now attempt to automatically initizalize in your server.",
-        description="> please wait, it can take a while.\n> note: if codygen dosen't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
+        description="> please wait, it can take a while.\n> note: if codygen doesn't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
         color=Color.purple
     )
     await guild.owner.send(embeds=[e,e2])
