@@ -10,14 +10,51 @@ class admin(commands.Cog):
     @commands.group(name="admin", description="commands for bot administrators. you need to be a team member to run any of these commands", invoke_without_command=True)
     async def admin(self,ctx: commands.Context):
         pass
-    @commands.Cog.listener()
-    async def on_ready(self):
-        logger.info(f"{self.__class__.__name__}: loaded.")
+    
+    async def cog_load(self):
+        logger.ok("loaded admin")
+        version = get_global_config()["version"]
+        activity = discord.Activity(type=discord.ActivityType.watching, name=f"v{version}")
+        self.bot: commands.Bot
+        await self.bot.change_presence(activity=activity, status=discord.Status.idle)
+    @commands.is_owner()
+    @admin.group(name="status")
+    async def status(self, ctx: commands.Context):
+        pass
+    @commands.is_owner()
+    @status.command(name="refresh", description="refresh the status to default (version display)")
+    async def refresh(self, ctx: commands.Context):
+        activity = discord.Activity(type=discord.ActivityType.watching, name=f"v{version}")
+        self.bot: commands.Bot
+        await self.bot.change_presence(activity=activity, status=discord.Status.idle)
+        await ctx.message.add_reaction("✅")
+    @commands.is_owner()
+    @status.command(name="set", description="set the bot's status")
+    async def set(self, ctx: commands.Context, type: int = 0, status: int = 0, *, content: str):
+        if type == 0: type = discord.ActivityType.playing
+        if type == 1: type = discord.ActivityType.listening
+        if type == 2: type = discord.ActivityType.watching
+        if status == 0: status = discord.Status.online
+        if status == 1: status = discord.Status.dnd
+        if status == 2: status = discord.Status.idle
+        if status == 3: status = discord.Status.invisible
+        activity = discord.Activity(type=type, name=content)
+        await self.bot.change_presence(activity=activity, status=status)
+        await ctx.message.add_reaction("✅")
+        
     @commands.is_owner()
     @admin.command(name="restart", description="fully restarts every instance of the bot") 
     async def restart(self,ctx: commands.Context):
-        await ctx.message.add_reaction("✅")
-        exit()
+        await ctx.message.add_reaction("🔄")
+        async def check(reaction, user):
+            return user == ctx.author and str(reaction.emoji) == '🔄'
+        try:
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=5.0, check=check)
+        except asyncio.TimeoutError:
+            await ctx.reply("-# timed out")
+        else:
+            await ctx.reply("-# restarting...")
+            exit()
     @commands.is_owner()
     @admin.command(name="regen_config", description="regenerates the config for current guild.")
     # use -g flag for global. #! DEFINITELY NOT RECOMMENDED WIPES EVERY CONFIG PLEASE DON'T
@@ -75,7 +112,7 @@ class admin(commands.Cog):
                 async with aiofiles.open('config.json', 'r') as f:
                     data = json.loads(await f.read())
                     data["version"] = version
-                async with aiofiles.open('config.json', 'r') as f: 
+                async with aiofiles.open('config.json', 'w') as f: 
                     f.write(json.dumps(data, indent=4))
             await ctx.reply(content,embed=embed)
             

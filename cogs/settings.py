@@ -108,7 +108,7 @@ class Settings(commands.Cog):
             await ctx.reply(embed=fail, mention_author=False)
             return
         await ctx.reply(embed=e2)
-        
+    
             
 async def setup(bot):
     await bot.add_cog(Settings(bot))

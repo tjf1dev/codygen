@@ -1,6 +1,6 @@
 from main import *
 
-class Info(commands.Cog):
+class info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Get information about certain things"
@@ -89,4 +89,4 @@ class Info(commands.Cog):
         e.set_thumbnail(url=guild.icon.url)
         await ctx.reply(embed=e)
 async def setup(bot):
-    await bot.add_cog(Info(bot))
+    await bot.add_cog(info(bot))

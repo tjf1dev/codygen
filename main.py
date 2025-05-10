@@ -148,12 +148,11 @@ words = data["commands"]["awawawa"]["words"]
 version = data["version"]
 # bot definitions
 intents = discord.Intents.all()
-activity = discord.Activity(type=discord.ActivityType.watching, name=f"v{version}")
+
 client = commands.AutoShardedBot(
     command_prefix=get_prefix,
     intents=intents,
     status=discord.Status.idle,
-    activity=activity,
     help_command=None,
     allowed_contexts=app_commands.AppCommandContext(guild=True,dm_channel=True,private_channel=True),
     allowed_installs=app_commands.AppInstallationType(guild=True,user=True)
@@ -171,7 +170,7 @@ GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
 class HelpSelect(discord.ui.Select):
     def __init__(self, bot):
         options = []
-        bot = client
+        bot = self.bot
         if bot.cogs:
             for cog_name, cog in bot.cogs.items():
                 if cog_name.lower() in ["jishaku"]:
@@ -188,6 +187,14 @@ class HelpSelect(discord.ui.Select):
             title=f"codygen - {self.values[0]}",
             color=Color.white
         )
+        if self.values[0] == "No Modules Loaded":
+            fail = discord.Embed(
+                title="failed to load the list of modules",
+                description=f"please report this issue.",
+                color=Color.negative
+            )
+            await interaction.response.edit_message(embed=fail)
+            return            
         cog = client.get_cog(self.values[0])
         if cog == None:
             fail = discord.Embed(

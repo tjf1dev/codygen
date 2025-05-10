@@ -9,9 +9,71 @@ def parse_msglink(link: str):
         guild_id, channel_id, message_id = map(int, match.groups())
         return guild_id, channel_id, message_id
     return None
+class HelpSelect(discord.ui.Select):
+    def __init__(self, bot):
+        self.bot: commands.Bot = bot
+        options = []
+        if bot.cogs:
+            for cog_name, cog in bot.cogs.items():
+                if cog_name.lower() in ["jishaku"]:
+                    pass
+                else:
+                    description = getattr(cog, "description", "no description available.")
+                    options.append(discord.SelectOption(label=cog_name.lower(), description=description.lower()))
+        else:
+            # add a fallback option if no cogs are loaded
+            options.append(discord.SelectOption(label="No Modules Loaded", description="Failed to load module list."))
+        super().__init__(placeholder="Select a cog", max_values=1, min_values=1, options=options)
+    async def callback(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title=f"codygen - {self.values[0]}",
+            color=Color.white
+        )
+        if self.values[0] == "No Modules Loaded":
+            fail = discord.Embed(
+                title="failed to load the list of modules",
+                description=f"please report this issue.",
+                color=Color.negative
+            )
+            await interaction.response.edit_message(embed=fail)
+            return            
+        cog = self.bot.get_cog(self.values[0])
+    
+        if cog == None:
+            fail = discord.Embed(
+                title="failed to load :broken_heart:",
+                description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
+                color=Color.negative
+            )
+            await interaction.response.edit_message(embed=fail)
+            return
+        elif len(cog.get_commands()) == 0:
+            fail = discord.Embed(
+                title="its quiet here...",
+                description=f"cogs.{self.values[0]} doesnt have any commands.",
+                color=Color.negative
+            )
+            await interaction.response.edit_message(embed=fail)
+        else:
+            for command in cog.walk_commands():
+                description = command.description if command.description != "" else "Figure it out yourself (no description provided)"
+                embed.add_field(
+                    name=f"/{command.full_parent_name} {command.name}",
+                    value=f"```{description}```",
+                    inline=False
+                )
+            await interaction.response.edit_message(embed=embed,view=HelpHomeView(self.bot))
+class HelpWiki(discord.ui.Button):
+    def __init__(self):
+        super().__init__(label="Documentation", style=discord.ButtonStyle.link, url="https://github.com/tjf1dev/codygen/wiki")
+class HelpHomeView(discord.ui.View):
+    def __init__(self, bot):
+        super().__init__()
+        self.add_item(HelpSelect(bot))
+        self.add_item(HelpWiki())
 class utility(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
+        self.bot: commands.Bot = bot
         self.description = "tools that can be helpful sometimes!"
 
     @tasks.loop(hours=24)
@@ -181,6 +243,7 @@ class utility(commands.Cog):
     @app_commands.allowed_installs(guilds=True,users=True)
     @commands.hybrid_command(name="ping", description="shows how well is codygen doing!") 
     async def ping(self, ctx: commands.Context):
+        client = self.bot
         e = discord.Embed(
             title=f"codygen v{version}",
             description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for command list +more",
@@ -261,18 +324,6 @@ class utility(commands.Cog):
             color=Color.purple
         )
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)
-    @verify()
-    @commands.hybrid_command(
-        name="help",
-        description="shows useful info about the bot."
-    )
-    async def help_command(self, ctx: commands.Context):
-        embed = discord.Embed(
-            title="",
-            description="# codygen\ncode: <https://github.com/tjf1dev/codygen>\nuse the menu's below to search for commands and their usages.", # i can change it now
-            color=Color.purple
-        )
-        await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)    
     async def add(self, ctx: commands.Context):
         bid = os.getenv("APP_ID")
         guild = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
@@ -294,7 +345,7 @@ class utility(commands.Cog):
     # you can do whatever you want with it, but #* if you redistribute this code without credit, you’re BREAKING THE LAW.
     # enjoy using codygen!
     @commands.command()
-    async def whoami(self, ctx: commands.Context): await ctx.reply(embed=discord.Embed(title="",description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing — it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command (cog utility.py, line 180)",color=Color.negative))
+    async def whoami(self, ctx: commands.Context): await ctx.reply(embed=discord.Embed(title="",description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py, line 290](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py#L290-L295>))",color=Color.negative))
 
     # now some exclusives i need for my server
     # guild id will be hardcoded
