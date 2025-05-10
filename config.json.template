@@ -77,9 +77,5 @@
                 "prefix_enabled": true
             }
         }
-    },
-    "support":{
-        "guild":
-        "channel":
     }
 }

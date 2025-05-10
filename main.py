@@ -13,6 +13,7 @@ from typing import AsyncGenerator, Union
 from colorama import Fore
 from ext.colors import Color
 from ext.logger import logger
+from ext.web import app
 io # its being used in different cogs, im marking it here so vscode wont annoy me with 'unused'
 requests # same as io
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
@@ -78,7 +79,7 @@ async def get_prefix(bot: commands.Bot = None, message: discord.Message =None) -
         conf = await get_guild_config(message.guild.id)
         prefix = conf["prefix"]["prefix"]
         if message == None or prefix == None:
-            return default_prefix
+            return commands.when_mentioned_or(default_prefix)
         return prefix
     except Exception as e:
         return default_prefix
@@ -131,128 +132,6 @@ def ensure_env():
         )
         sys.exit(1)
 
-
-# flask flask flask flask
-app = ("codygen")
-logger = logging.getLogger(__name__)
-
-app = quart.Quart("codygen")
-
-@app.route("/callback")
-async def callback():
-    try:
-        logger.debug("received callback")
-        token = quart.request.args.get("token")
-        state = quart.request.args.get("state")
-        uid = state_to_id(state)
-        try:
-            api_key = os.environ['LASTFM_API_KEY']
-            secret = os.environ['LASTFM_SECRET']
-        except KeyError:
-            logger.error(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
-            output = {
-            "error": "Misconfigured bot configuration",
-            "details": ".env file appears to have missing LASTFM_SECRET and/or LASTFM_API_KEY, contact the bot administrator for more details."
-            }
-            return output
-        if not token or not uid:
-            return {"error": "Missing parameters", "details": "Token or state is missing"}
-        params = {
-            'api_key': api_key,
-            'method': 'auth.getSession',
-            'token': token
-        }
-        sorted_params = "".join(f"{k}{v}" for k, v in sorted(params.items()))
-        sig_string = sorted_params + secret
-        api_sig = hashlib.md5(sig_string.encode('utf-8')).hexdigest()
-        url = "http://ws.audioscrobbler.com/2.0/"
-        params.update({'api_sig': api_sig, 'format': 'json'})
-
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params) as resp:
-                data = await resp.json()
-        logger.info(f"{uid}'s data is {data}")
-        try:
-            async with aiofiles.open("data/last.fm/users.json", "r") as f:
-                content = await f.read()
-                json_data = json.loads(content)
-            json_data[uid] = data
-            async with aiofiles.open("data/last.fm/users.json", "w") as f:
-                await f.write(json.dumps(json_data, indent=4))
-        except Exception as e:
-            logger.error(f"An error occured while trying to authenticate {uid}: {e}")
-
-        if 'session' in data:
-            user = client.get_user(uid)
-            e = discord.Embed(
-                title="",
-                description="## Authenticated successfully\nYou can now use all of last.fm features!"
-            )
-            user.send(embed=e)
-            return quart.render_template("success.html")
-        else:
-            logger.error(f"Session key missing: {data}")
-            return {"error": "Session key missing", "details": str(data)}
-    except Exception as e:
-        return {"error":"An internal error occured","code":"500","type":str(type(e)),"content":e}
-@app.route("/")
-async def root():
-    return({"status":"codygen is online"})
-# setup logging
-import logging
-from colorama import Fore
-import threading
-logger = logging.getLogger(__name__)
-class ColorFormatter(logging.Formatter):
-    COLORS = {
-        'DEBUG': Fore.LIGHTBLACK_EX,
-        'INFO': Fore.BLUE,
-        'WARNING': Fore.YELLOW,
-        'ERROR': Fore.RED,
-        'CRITICAL': Fore.MAGENTA,
-        'OK': Fore.GREEN
-    }
-    def format(self, record):
-        log_color = self.COLORS.get(record.levelname, Fore.WHITE)
-        record.levelname = f"{log_color}{record.levelname}{Fore.RESET}"
-        record.msg = f"{log_color}{record.msg}{Fore.RESET}"
-        return super().format(record)
-def recursive_update(existing_config, template_config):
-    def merge(d1, d2):
-        result = d1.copy()
-        for key, value in d2.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = merge(result[key], value)
-            else:
-                result.setdefault(key, value)
-        return result
-
-    return merge(existing_config, template_config)
-if logger.hasHandlers():
-    logger.handlers.clear()
-handler = logging.StreamHandler()
-handler.setFormatter(ColorFormatter('%(asctime)s [ %(levelname)s ] %(message)s'))
-logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
-logger.propagate = False
-# disable discord.py logging
-discord_logger = logging.getLogger('discord')
-discord_logger.setLevel(logging.CRITICAL)
-for h in discord_logger.handlers:
-    discord_logger.removeHandler(h)
-logging.getLogger('discord.http').setLevel(logging.CRITICAL)
-if not os.path.exists("logs"):
-    os.makedirs("logs")
-# setup file logging
-log_filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
-file_handler = logging.FileHandler(f"logs/{log_filename}")
-latest_handler = logging.FileHandler("logs/latest.log", mode='w')  # overwrite the latest log on each run
-file_handler.setFormatter('%(asctime)s [ %(levelname)s ] %(message)s')
-latest_handler.setFormatter('%(asctime)s [ %(levelname)s ] %(message)s')
-logger.addHandler(file_handler)
-logger.addHandler(latest_handler)
-# ensure the 'logs' directory exists
 # load configs
 try:
     with open("config.json","r") as f:
@@ -390,6 +269,17 @@ def verify():
         return prefix_enabled
 
     return commands.check(predicate)
+def recursive_update(existing_config, template_config):
+    def merge(d1, d2):
+        result = d1.copy()
+        for key, value in d2.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = merge(result[key], value)
+            else:
+                result.setdefault(key, value)
+        return result
+
+    return merge(existing_config, template_config)
 async def verify_alt(guild_id,interaction) -> bool:
     """
     verify() but instead of a decorator its a function
@@ -442,7 +332,7 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
     if type == 2:
         e = discord.Embed(
             title=f"Welcome to codygen! The bot has been successfully added to {guild.name}.",
-            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
+            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.\n-# initializer v2",
             color=Color.white
         )
         e2 = discord.Embed(
@@ -453,7 +343,7 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
     else:
         e = discord.Embed(
             title=f"hello! welcome (back) to codygen!",
-            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
+            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.\n-# initializer v2",
             color=Color.white
         )
         e2 = discord.Embed(
@@ -520,7 +410,6 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
     yield stage2
 loaded_cogs = set()
 
-
 @client.event
 async def on_guild_join(guild):
     owner = guild.owner
@@ -532,7 +421,6 @@ async def on_guild_join(guild):
     except Exception as e:
         logger.error(f"An error occurred while trying to setup {guild.name}: {e}")
 
-
 @client.event
 async def on_ready():
     global start_time
@@ -540,6 +428,7 @@ async def on_ready():
         return
     client.already_ready = True
     client.start_time = time.time()
+    logger.info("loading cogs..")
     await client.load_extension('jishaku') # jsk #* pip install jishaku
     config = get_global_config()
     blacklist = config["cogs"]["blacklist"]
@@ -558,6 +447,7 @@ async def on_ready():
                 await client.load_extension(f"cogs.{cog_name}")
             except asyncio.TimeoutError:
                 print(f"Timeout while loading {cog_name}")
+    logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
     admin_cog = client.get_cog("admin")
     admin_group = admin_cog.admin
     @commands.is_owner()
@@ -593,7 +483,7 @@ async def on_ready():
             await tree.sync(guild=ctx.guild)
             logger.info("syncing guild")
         await ctx.reply(embed=embed, ephemeral=True, mention_author=False)
-    logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
+    
     start_time = time.time()
 
 # @client.event
@@ -615,127 +505,6 @@ async def on_ready():
 #             )
 #         await message.reply(embed=e)
 #     await client.process_commands(message)
-@verify()
-@app_commands.allowed_contexts(guilds=True,dms=True,private_channels=True)
-@app_commands.allowed_installs(guilds=True,users=True)
-@client.hybrid_command(name="ping", description="shows how well is codygen doing!") 
-async def ping(ctx: commands.Context):
-    e = discord.Embed(
-        title=f"codygen v{version}",
-        description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for more info",
-        color=Color.purple
-    )
-    e.add_field(
-        name="ping",
-        value=f"`{round(client.latency * 1000)} ms`",
-        inline=True
-    )
-    current_time = time.time()
-    difference = int(round(current_time - start_time))
-    uptime = str(datetime.timedelta(seconds=difference))
-    e.add_field(
-        name="uptime",
-        value=f"`{uptime}`",
-        inline=True
-    )
-    process = psutil.Process(os.getpid())
-    ram_usage = process.memory_info().rss / 1024 ** 2
-    total_memory = psutil.virtual_memory().total / 1024 ** 2
-    e.add_field(
-        name="ram usage",
-        value=f"`{ram_usage:.2f} MB / {total_memory:.2f} MB`",
-        inline=True
-    )
-    cpu_usage = psutil.cpu_percent(interval=1)
-    e.add_field(
-        name="cpu usage",
-        value=f"`{cpu_usage}%`",
-        inline=True
-    )
-    # nerdy ahh logic
-    commands_list = [command.name for command in client.commands if not isinstance(command, commands.Group)] + [
-        command.name for command in client.tree.walk_commands() if not isinstance(command, commands.Group)
-    ]
-    for cog in client.cogs.values():
-        for command in cog.get_commands():
-            if not isinstance(command, commands.Group): 
-                commands_list.append(command.name)
-    for command in client.walk_commands():
-        if not isinstance(command, commands.Group): 
-            commands_list.append(command.name)
-        else:
-            for subcommand in command.walk_commands():
-                commands_list.append(subcommand.name)
-    e.add_field(
-        name="commands",
-        value=f"`codygen has {len(set(commands_list))} commands`",
-        inline=True
-    )
-    e.add_field(
-        name="servers",
-        value=f"`codygen is in {len(client.guilds)} servers.`",
-        inline=True
-    )
-    e.add_field(
-        name="users",
-        value=f"`serving {len(client.users)} users.`",
-        inline=True
-    )
-    e.add_field(
-        name="system info",
-        value=f"`running discord.py {discord.__version__} on python {sys.version.split()[0]}`",
-        inline=True
-    )    
-    await ctx.reply(embed=e,ephemeral=False)
-@verify()
-@client.hybrid_command(
-    name="help",
-    description="shows useful info about the bot."
-)
-async def help_command(ctx: commands.Context):
-    embed = discord.Embed(
-        title="codygen",
-        description="**tip: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # i can change it now
-        color=Color.purple
-    )
-    await ctx.reply(embed=embed, view=HelpHomeView(client),ephemeral=True)
-#todo refresh the support system
-@app_commands.allowed_installs(guilds=False,users=True)
-@app_commands.allowed_contexts(guilds=False,dms=True,private_channels=True)
-@client.hybrid_command(name="support",description="contact the bot developers.")
-async def support(ctx: commands.Context,topic:str):
-    ticket_id=f"{ctx.author.name}{random.randint(1000000,9999999)}"
-    # user side
-    e = discord.Embed(
-        title="ticket has been sent.",
-        description="please note that it may take a few days to receive a response.\nyou will recieve a DM from codygen if you do.\nfor faster response time, please join our [server](<https://discord.gg/WyxN6gsQRH>).",
-        color=Color.white
-    ).add_field(
-        name="ticket ID (please keep this for reference.)",
-        value=f"```{ticket_id}```"
-    )
-    msg = discord.Embed(
-        title="your message",
-        description=f"{topic}",
-        color=Color.gray
-    )
-    await ctx.reply(embeds=[e,msg],ephemeral=True)
-    await ctx.author.send(embeds=[e,msg]) # dm
-    # dev side
-    e2 = discord.Embed(
-        title="New support ticket",
-        description=f"```{topic}```",
-        color=Color.positive
-    ).add_field(
-        name="User",value=f"Name: {ctx.author.name} ({ctx.author.mention})\nID: {ctx.author.id}"
-    ).add_field(
-        name="Ticket",
-        value=f"ID: `{ticket_id}`"
-    )
-    channel_id = get_global_config()["support"]["channel"]
-    channel = await client.fetch_channel(channel_id)
-    await channel.send(f"{ctx.author.id}\n{ticket_id}", embed=e2, view=supportReply())
-
 
 async def run_quart():
     await app.run_task(host="0.0.0.0", port=4887)

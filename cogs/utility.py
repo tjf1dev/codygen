@@ -176,7 +176,90 @@ class utility(commands.Cog):
         if ping and pingc.strip():
             await channel.send(pingc, reference=msg)
         await ctx.reply("closed!", ephemeral=True)
-        
+    @verify()
+    @app_commands.allowed_contexts(guilds=True,dms=True,private_channels=True)
+    @app_commands.allowed_installs(guilds=True,users=True)
+    @commands.hybrid_command(name="ping", description="shows how well is codygen doing!") 
+    async def ping(self, ctx: commands.Context):
+        e = discord.Embed(
+            title=f"codygen v{version}",
+            description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for more info",
+            color=Color.purple
+        )
+        e.add_field(
+            name="ping",
+            value=f"`{round(self.bot.latency * 1000)} ms`",
+            inline=True
+        )
+        current_time = time.time()
+        difference = int(round(current_time - start_time))
+        uptime = str(datetime.timedelta(seconds=difference))
+        e.add_field(
+            name="uptime",
+            value=f"`{uptime}`",
+            inline=True
+        )
+        process = psutil.Process(os.getpid())
+        ram_usage = process.memory_info().rss / 1024 ** 2
+        total_memory = psutil.virtual_memory().total / 1024 ** 2
+        e.add_field(
+            name="ram usage",
+            value=f"`{ram_usage:.2f} MB / {total_memory:.2f} MB`",
+            inline=True
+        )
+        cpu_usage = psutil.cpu_percent(interval=1)
+        e.add_field(
+            name="cpu usage",
+            value=f"`{cpu_usage}%`",
+            inline=True
+        )
+        # nerdy ahh logic
+        commands_list = [command.name for command in client.commands if not isinstance(command, commands.Group)] + [
+            command.name for command in client.tree.walk_commands() if not isinstance(command, commands.Group)
+        ]
+        for cog in client.cogs.values():
+            for command in cog.get_commands():
+                if not isinstance(command, commands.Group): 
+                    commands_list.append(command.name)
+        for command in client.walk_commands():
+            if not isinstance(command, commands.Group): 
+                commands_list.append(command.name)
+            else:
+                for subcommand in command.walk_commands():
+                    commands_list.append(subcommand.name)
+        e.add_field(
+            name="commands",
+            value=f"`codygen has {len(set(commands_list))} commands`",
+            inline=True
+        )
+        e.add_field(
+            name="servers",
+            value=f"`codygen is in {len(client.guilds)} servers.`",
+            inline=True
+        )
+        e.add_field(
+            name="users",
+            value=f"`serving {len(client.users)} users.`",
+            inline=True
+        )
+        e.add_field(
+            name="system info",
+            value=f"`running discord.py {discord.__version__} on python {sys.version.split()[0]}`",
+            inline=True
+        )    
+        await ctx.reply(embed=e,ephemeral=False)
+    @verify()
+    @commands.hybrid_command(
+        name="help",
+        description="shows useful info about the bot."
+    )
+    async def help_command(self, ctx: commands.Context):
+        embed = discord.Embed(
+            title="codygen",
+            description="**tip: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # i can change it now
+            color=Color.purple
+        )
+        await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)
     # hey, for self-hosted users: #! please don’t remove this command
     # i get it, you want your own bot, but at least give me some credit for this
     # if you really want your own bot, make one yourself
