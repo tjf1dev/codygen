@@ -71,12 +71,12 @@ class admin(commands.Cog):
             else:
                 embed = e
                 content = f"```{result.stdout}```"
-                if version:
-                    async with aiofiles.open('config.json', 'r') as f:
-                        data = json.loads(await f.read())
-                        data["version"] = version
-                    async with aiofiles.open('config.json', 'r') as f: 
-                        f.write(json.dumps(data, indent=4))
+            if version:
+                async with aiofiles.open('config.json', 'r') as f:
+                    data = json.loads(await f.read())
+                    data["version"] = version
+                async with aiofiles.open('config.json', 'r') as f: 
+                    f.write(json.dumps(data, indent=4))
             await ctx.reply(content,embed=embed)
             
         except subprocess.CalledProcessError as e:
