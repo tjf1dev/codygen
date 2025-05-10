@@ -134,10 +134,8 @@ class level(commands.Cog):
         guild = message.guild
         if message.author.bot:
             return
-        logger.debug("test")
         user = message.author
         guild_config = await get_guild_config(guild.id)
-        logger.debug("guild config gathered")
         per_message_default = get_config_defaults()["modules"]["level"]["per_message"]
         xp_per_message = guild_config.get("modules", {}).get("level", {}).get("per_message", per_message_default)
         channel_id = guild_config.get("modules", {}).get("level", {}).get("levelup", {}).get("channel")
@@ -157,20 +155,16 @@ class level(commands.Cog):
 
         role_boosts: dict = boosts.get("role", {})
         user_boosts: dict = boosts.get("user", {})
-        logger.debug("role and user boosts gathered")
         highest_boost = global_boost_value
         user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
         if user_boost["expires"] > time.time():
             highest_boost = max(highest_boost, user_boost["percentage"])
-        logger.debug("user boost gathered")
         for role in user.roles:
             role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
             if role_boost["expires"] > time.time():
                 highest_boost = max(highest_boost, role_boost["percentage"])
         highest_boost = global_boost_value + user_boost.get("percentage") + role_boost.get("percentage")
-        logger.debug("role boost gathered")
         xp_with_boost = xp_per_message * (1 + highest_boost / 100)
-        logger.debug(f"highest boost: {highest_boost}")
         await set_guild_config_key(guild.id, f"stats.level.users.{message.author.id}.xp", int(user_xp + xp_with_boost))
 
         old_level = xp_to_level(guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"] - int(xp_with_boost))
@@ -197,6 +191,7 @@ class level(commands.Cog):
             f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
             f"\nxp boost: **{highest_boost}%**!" if highest_boost != 0 else ""
         )
+        logger.debug(f"{user.name} ({user.id}) in {guild.id} has recieved {xp_with_boost}xp")
 
 
 

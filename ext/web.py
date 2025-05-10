@@ -58,6 +58,11 @@ async def callback():
             return {"error": "Session key missing", "details": str(data)}
     except Exception as e:
         return {"error":"An internal error occured","code":"500","type":str(type(e)),"content":e}
+@app.route("/invite")
+async def invite():
+    bid = os.getenv("APP_ID")
+    url = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
+    return quart.redirect(url)
 @app.route("/")
 async def root():
     return({"status":"codygen is online"})

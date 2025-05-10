@@ -3,6 +3,7 @@ import json
 import os
 import discord
 from discord.ext import commands
+no_app_force = False
 def recursive_update(original: dict, template: dict) -> dict:
     """Recursively update a dictionary with missing keys from a template."""
     for key, value in template.items():
@@ -16,20 +17,27 @@ class InitHomeView(discord.ui.View):
     def __init__(self):
         super().__init__()
 
+
     @discord.ui.button(label="Start", style=discord.ButtonStyle.green, custom_id="init_button")
     async def init_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Ensure only administrators can run this
+        
+        await interaction.response.defer(ephemeral=True)
         if not interaction.user.guild_permissions.administrator:
             error_embed = discord.Embed(
                 title="Access Denied",
                 description="### You must have admin to run this, silly!",
-                color=Color.negative
+                color=discord.Color.red()
             )
-            await interaction.response.send_message(embed=error_embed, ephemeral=True)
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
             return
-        await interaction.response.defer(ephemeral=True)
-        async for embed in setup_guild(interaction.guild, type=1):
-            await interaction.followup.send(embed=embed)
+        button.disabled = True
+        button.style = discord.ButtonStyle.secondary
+        button.label = "Please wait..."
+        await interaction.edit_original_response(view=InitHomeView())
+        logger.debug(f"starting initialization for guild {interaction.guild.id}")
+        async for embed in setup_guild(interaction.guild, gtype=1):
+            await interaction.followup.send(embeds=list(embed), ephemeral=True)
+
 
 class Settings(commands.Cog):
     def __init__(self, bot):
@@ -67,15 +75,17 @@ class Settings(commands.Cog):
     @commands.has_guild_permissions(administrator=True)
     @settings.command(name="init", description="Check if the bot has valid permissions and create a config.")
     async def init(self, ctx: commands.Context):
+        # no_app_force = True
         if not ctx.interaction:
-            await ctx.reply(
-                "## A prefixed command won't work for this.\n### Please use the </settings init:1338195438494289964> command instead.",
-                ephemeral=True
-            )
-            return
+            if not no_app_force:
+                await ctx.reply(
+                    "## A prefixed command won't work for this.\n### Please use the </settings init:1338195438494289964> command instead.",
+                    ephemeral=True
+                )
+                return
         embed = discord.Embed(
-            title="Codygen - Initialization",
-            description="## Hi! Welcome to Codygen :3\nPress the button below to start the initialization"
+            title="",
+            description="-# press the button below to start initialization."
         )
         await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
     @commands.has_guild_permissions(administrator=True)

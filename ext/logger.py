@@ -15,18 +15,30 @@ class ColorFormatter(logging.Formatter):
         record.levelname = f"{log_color}{record.levelname}{Fore.RESET}"
         record.msg = f"{log_color}{record.msg}{Fore.RESET}"
         return super().format(record)
-    
+OK_LEVEL = 25
+logging.addLevelName(OK_LEVEL, "OK")
+def ok(self, message, *args, **kwargs):
+    if self.isEnabledFor(OK_LEVEL):
+        self._log(OK_LEVEL, message, args, stacklevel=2, **kwargs)
+logging.Logger.ok = ok
 logger = logging.getLogger(__name__)
 if logger.hasHandlers():
     logger.handlers.clear()
 
 handler = logging.StreamHandler()
-handler.setFormatter(ColorFormatter('%(asctime)s %(funcName)s [ %(levelname)s ] %(message)s'))
 
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 logger.propagate = False
+handler.setFormatter(ColorFormatter(
+    '%(asctime)s [ %(levelname)s ] %(message)s (%(funcName)s)',
+    datefmt='%d/%m/%Y %H:%M:%S'
+))
 
+file_formatter = logging.Formatter(
+    '%(asctime)s [ %(levelname)s ] %(message)s: (%(funcName)s)',
+    datefmt='%d/%m/%Y %H:%M:%S'
+)
 discord_logger = logging.getLogger('discord')
 discord_logger.setLevel(logging.CRITICAL)
 
@@ -34,7 +46,7 @@ for h in discord_logger.handlers:
     discord_logger.removeHandler(h)
 
 logging.getLogger('discord.http').setLevel(logging.CRITICAL)
-
+colorless_formatter = '%(asctime)s [ %(levelname)s ] %(funcName)s: %(message)s'
 # file logging
 if not os.path.exists("logs"):
     os.makedirs("logs")
@@ -42,10 +54,9 @@ if not os.path.exists("logs"):
 log_filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
 
 file_handler = logging.FileHandler(f"logs/{log_filename}")
-file_handler.setFormatter('%(asctime)s %(funcName)s [ %(levelname)s ] %(message)s')
-
 latest_handler = logging.FileHandler("logs/latest.log", mode='w')
-latest_handler.setFormatter('%(asctime)s %(funcName)s [ %(levelname)s ] %(message)s')
+file_handler.setFormatter(file_formatter)
+latest_handler.setFormatter(file_formatter)
 
 logger.addHandler(file_handler)
 logger.addHandler(latest_handler)

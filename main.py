@@ -318,9 +318,9 @@ async def on_command_error(ctx: commands.Context, error):
             value=f"```{version}```", inline=True
         )
         await ctx.send(embed=e,ephemeral=True)  # Handle other errors normally
+        logger.error(f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__}: {error}")
         raise commands.errors.CommandError(str(error))
-
-async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Union[discord.Embed, list[discord.Embed], bool], bool]:
+async def setup_guild(guild: discord.Guild, gtype: int = 1) -> AsyncGenerator[list[discord.Embed], bool] | None:
     """
         Setup (initalize) a guild.
         Replaces on_guild_join and /settings init functions, and is shared between them.
@@ -329,7 +329,8 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
             guild: `discord.Guild` object with the guild to setup.
             type: 1 = already existing guild, 2 = newly added guild
     """
-    if type == 2:
+    logger.debug(f"now setting up {guild.id}...")
+    if gtype == 2:
         e = discord.Embed(
             title=f"Welcome to codygen! The bot has been successfully added to {guild.name}.",
             description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.\n-# initializer v2",
@@ -351,7 +352,9 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
             description="> please wait, it can take a while.",
             color=Color.purple
         )
+    
     yield [e, e2]
+    await asyncio.sleep(2)
     bot_member = guild.me
     required_permissions = discord.Permissions(
         manage_roles=True,
@@ -378,7 +381,8 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
             description=f"### Missing the following permissions: `{', '.join(missing_perms)}`\nPlease fix the permissions and try again!",
             color=Color.negative
         )
-        yield error_embed
+        yield [error_embed]
+        logger.debug("yielded error_embed")
         return
     guild_config_path = f"data/guilds/{guild.id}.json"
     gconf = await get_guild_config(guild.id)
@@ -395,7 +399,8 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
         await make_guild_config(guild.id, template_config)
     else:
         existing_config = await get_guild_config(guild.id)
-        updated_config = recursive_update(existing_config, template_config)
+        updated_config: dict = recursive_update(existing_config, template_config)
+        updated_config["timestamp"] = time.time()
         await make_guild_config(guild.id, updated_config)
     stage2 = discord.Embed(
         title="Initialization Finished!",
@@ -407,7 +412,8 @@ async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Uni
         value="Permissions\n> The bot has sufficient permissions to work!\n"
                 f"Config\n> {'A configuration file already exists and has been updated with missing keys' if config_already_made else 'A configuration file has been created for your guild!'}"
     )
-    yield stage2
+    yield [stage2]
+    logger.debug(f"...finished setting up {guild.id}")
 loaded_cogs = set()
 
 @client.event
@@ -416,11 +422,11 @@ async def on_guild_join(guild):
     if not owner:
         return 
     try:
-        async for embed in setup_guild(guild, type=2):
+        async for embed in setup_guild(guild, gtype=2):
             await owner.send(embed=embed)
     except Exception as e:
         logger.error(f"An error occurred while trying to setup {guild.name}: {e}")
-
+client.start_time = time.time()
 @client.event
 async def on_ready():
     global start_time
@@ -442,11 +448,11 @@ async def on_ready():
                 logger.warning(f"Skipping blacklisted cog {cog_name}")
                 continue
             loaded_cogs.add(cog_name)
-            logger.debug(f"loaded {cog_name}")
             try:
                 await client.load_extension(f"cogs.{cog_name}")
             except asyncio.TimeoutError:
-                print(f"Timeout while loading {cog_name}")
+                logger.error(f"Timeout while loading {cog_name}")
+            logger.ok(f"loaded {cog_name}")
     logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
     admin_cog = client.get_cog("admin")
     admin_group = admin_cog.admin

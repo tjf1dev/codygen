@@ -183,17 +183,18 @@ class utility(commands.Cog):
     async def ping(self, ctx: commands.Context):
         e = discord.Embed(
             title=f"codygen v{version}",
-            description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for more info",
-            color=Color.purple
+            description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for command list +more",
+            color=Color.accent
         )
+        e.set_thumbnail(url=self.bot.user.avatar.url)
         e.add_field(
             name="ping",
             value=f"`{round(self.bot.latency * 1000)} ms`",
             inline=True
         )
         current_time = time.time()
-        difference = int(round(current_time - start_time))
-        uptime = str(datetime.timedelta(seconds=difference))
+        difference = int(round(current_time - self.bot.start_time))
+        uptime = str(timedelta(seconds=difference))
         e.add_field(
             name="uptime",
             value=f"`{uptime}`",
@@ -255,11 +256,85 @@ class utility(commands.Cog):
     )
     async def help_command(self, ctx: commands.Context):
         embed = discord.Embed(
-            title="codygen",
-            description="**tip: a copy of this document can be found on [our documentation](https://github.com/tjf1dev/codygen/wiki)!**\nuse the menu's below to search for commands and their usages.", # i can change it now
+            title="",
+            description="# codygen\ncode: <https://github.com/tjf1dev/codygen>\nuse the menu's below to search for commands and their usages.", # i can change it now
             color=Color.purple
         )
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)
+    @verify()
+    @commands.hybrid_command(
+        name="help",
+        description="shows useful info about the bot."
+    )
+    async def help_command(self, ctx: commands.Context):
+        embed = discord.Embed(
+            title="",
+            description="# codygen\ncode: <https://github.com/tjf1dev/codygen>\nuse the menu's below to search for commands and their usages.", # i can change it now
+            color=Color.purple
+        )
+        await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)    
+    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
+    @utility.command(name="guild", description="view information about this server.")
+    async def guild(self, ctx: commands.Context):
+        guild = ctx.guild
+        roles = await guild.fetch_roles()
+        members = guild.members
+        channels = await guild.fetch_channels()
+        bots = []
+        users = []
+        for m in members:
+            if m.bot:
+                bots.append(m)
+            else:
+                users.append(m)
+        voice_channels = []
+        text_channels = []
+        other_channels = []
+        for c in channels:
+            if c.type == discord.ChannelType.voice:
+                voice_channels.append(c)
+            if c.type == discord.ChannelType.text:
+                text_channels.append(c)
+            else:
+                if c.type != discord.ChannelType.category:
+                    other_channels.append(c)
+
+        
+        e = discord.Embed(
+            title=f"",
+            description=f"# about {guild.name}\n"
+                f"id: {guild.id}\n"
+                f"owner: {guild.owner.mention}\n"
+                f"roles: {len(roles)}\n"
+                f"[icon url](<{guild.icon.url}>)\n"
+                f"## channels\n"
+                f"total: {len(channels)}\n"
+                f"text: {len(text_channels)}\n"
+                f"voice: {len(voice_channels)}\n"
+                f"other: {len(other_channels)}\n\n"
+                f"## members\n"
+                f"total: {len(members)}\n"
+                f"bots: {len(bots)}\n"
+                f"users: {len(users)}",
+            color=Color.white
+        )
+        e.set_thumbnail(url=guild.icon.url)
+        await ctx.reply(embed=e)
+    @commands.hybrid_command(name="add", description="add codygen to your server, or install it to your profile", aliases=["invite"])
+    async def add(self, ctx: commands.Context):
+        bid = os.getenv("APP_ID")
+        guild = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
+        user = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&integration_type=1&scope=applications.commands"        
+        e = discord.Embed(
+            description="# add codygen\n"
+            f"## [server]({guild})\n"
+            "use the link above to invite codygen to your server. this is the regular way of adding bots\n"
+            f"## [user install]({user})\n"
+            "use this link to install codygen to your user. you will be able to use it's commands anywhere\n\n"
+            f"-# [about codygen](https://github.com/tjf1dev/codygen)",
+            color=Color.accent
+        )
+        await ctx.reply(embed=e,ephemeral=False)
     # hey, for self-hosted users: #! please don’t remove this command
     # i get it, you want your own bot, but at least give me some credit for this
     # if you really want your own bot, make one yourself
@@ -268,5 +343,35 @@ class utility(commands.Cog):
     # enjoy using codygen!
     @commands.command()
     async def whoami(self, ctx: commands.Context): await ctx.reply(embed=discord.Embed(title="",description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing — it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command (cog utility.py, line 180)",color=Color.negative))
+
+    # now some exclusives i need for my server
+    # guild id will be hardcoded
+    import re
+
+    @commands.Cog.listener("on_message")
+    async def on_message(self, message: discord.Message):
+        if message.guild is None:
+            return
+
+        if message.guild.id != 1333785291584180244:
+            return
+
+        if message.author.bot:
+            return
+
+        url_pattern = re.compile(r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+\.(?:png|jpg|jpeg|gif|webp|bmp)")
+        urls = url_pattern.findall(message.content)
+
+        if urls:
+            logger.debug(f"User sent an image/GIF link: {urls[0]}")
+            perms = message.channel.permissions_for(message.author) 
+            logger.debug(f"attach_files: {perms.attach_files}, embed_links: {perms.embed_links}")
+            if not perms.embed_links:
+                sticker = await message.guild.fetch_sticker(1370752176787558451)
+                if sticker:
+                    await message.reply(stickers=[sticker])
+                    logger.debug("Replied with sticker because a media URL was sent and user can't embed")
+
+
 async def setup(bot):
     await bot.add_cog(utility(bot))
