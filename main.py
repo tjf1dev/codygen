@@ -9,9 +9,12 @@
 import discord, os, aiofiles, dotenv, random, io, json, time, psutil, datetime, logging, requests, asyncio,hashlib, base64, sys, quart, aiohttp
 from discord.ext import commands
 from discord import app_commands
+from typing import AsyncGenerator, Union
 from colorama import Fore
 from extensions.colors import Color
-io # its being used in different cogs
+from extensions.logger import logger
+io # its being used in different cogs, im marking it here so vscode wont annoy me with 'unused'
+requests # same as io
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
 def get_global_config() -> dict:
@@ -38,6 +41,10 @@ async def get_guild_config(guild_id: str | int) -> dict:
             return json.loads(await f.read())
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
+async def make_guild_config(guild_id: str | int, config: dict) -> None:
+    os.makedirs("data/guilds", exist_ok=True)
+    async with aiofiles.open(f"data/guilds/{guild_id}.json", "w") as f:
+        await f.write(json.dumps(config, indent=4))
 # example
 # await set_guild_config_key(1234567890123456, "settings.prefix", "!")
 async def set_guild_config_key(guild_id: str | int, key: str, value) -> None:
@@ -167,11 +174,12 @@ async def callback():
                 data = await resp.json()
         logger.info(f"{uid}'s data is {data}")
         try:
-            with open("data/last.fm/users.json","r") as f:
-                json_data = json.load(f)
+            async with aiofiles.open("data/last.fm/users.json", "r") as f:
+                content = await f.read()
+                json_data = json.loads(content)
             json_data[uid] = data
-            with open("data/last.fm/users.json","w") as f:
-                json.dump(json_data, f,indent=4)
+            async with aiofiles.open("data/last.fm/users.json", "w") as f:
+                await f.write(json.dumps(json_data, indent=4))
         except Exception as e:
             logger.error(f"An error occured while trying to authenticate {uid}: {e}")
 
@@ -240,8 +248,8 @@ if not os.path.exists("logs"):
 log_filename = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
 file_handler = logging.FileHandler(f"logs/{log_filename}")
 latest_handler = logging.FileHandler("logs/latest.log", mode='w')  # overwrite the latest log on each run
-file_handler.setFormatter(ColorFormatter('%(asctime)s [ %(levelname)s ] %(message)s'))
-latest_handler.setFormatter(ColorFormatter('%(asctime)s [ %(levelname)s ] %(message)s'))
+file_handler.setFormatter('%(asctime)s [ %(levelname)s ] %(message)s')
+latest_handler.setFormatter('%(asctime)s [ %(levelname)s ] %(message)s')
 logger.addHandler(file_handler)
 logger.addHandler(latest_handler)
 # ensure the 'logs' directory exists
@@ -250,7 +258,7 @@ try:
     with open("config.json","r") as f:
         data = json.load(f)
 except Exception as e:
-    print(f"{Fore.LIGHTRED_EX}could not find config, generating new configuration{Fore.RESET}")
+    logger.error(f"could not find config, generating new configuration")
     pass
 # command configs
 data = get_global_config()
@@ -421,21 +429,39 @@ async def on_command_error(ctx: commands.Context, error):
         )
         await ctx.send(embed=e,ephemeral=True)  # Handle other errors normally
         raise commands.errors.CommandError(str(error))
-loaded_cogs = set()
-@client.event
-async def on_guild_join(guild):
-    # stage 0
-    e = discord.Embed(
-        title=f"Welcome to codygen! The bot has been successfully added to {guild.name}.",
-        description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
-        color=Color.white
-    )
-    e2 = discord.Embed(
-        title="codygen will now attempt to automatically initizalize in your server.",
-        description="> please wait, it can take a while.\n> note: if codygen dosen't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
-        color=Color.purple
-    )
-    await guild.owner.send(embeds=[e,e2])
+
+async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Union[discord.Embed, list[discord.Embed], bool], None, bool]:
+    """
+        Setup (initalize) a guild.
+        Replaces on_guild_join and /settings init functions, and is shared between them.
+        Returns embeds in realtime.
+        Arguments:
+            guild: `discord.Guild` object with the guild to setup.
+            type: 1 = already existing guild, 2 = newly added guild
+    """
+    if type == 2:
+        e = discord.Embed(
+            title=f"Welcome to codygen! The bot has been successfully added to {guild.name}.",
+            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
+            color=Color.white
+        )
+        e2 = discord.Embed(
+            title="codygen will now attempt to automatically initizalize in your server.",
+            description="> please wait, it can take a while.\n> note: if codygen dosen't update you on the progress of the initialization, you will need to do it yourself: run the </settings init:1340646304073650308> command in your guild.",
+            color=Color.purple
+        )
+    else:
+        e = discord.Embed(
+            title=f"hello! welcome (back) to codygen!",
+            description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.",
+            color=Color.white
+        )
+        e2 = discord.Embed(
+            title="codygen will now attempt to initizalize *(update)* in your server.",
+            description="> please wait, it can take a while.",
+            color=Color.purple
+        )
+    yield [e, e2]
     bot_member = guild.me
     required_permissions = discord.Permissions(
         manage_roles=True,
@@ -462,22 +488,25 @@ async def on_guild_join(guild):
             description=f"### Missing the following permissions: `{', '.join(missing_perms)}`\nPlease fix the permissions and try again!",
             color=Color.negative
         )
-        await guild.owner.send(embed=error_embed)
+        yield error_embed
         return
     guild_config_path = f"data/guilds/{guild.id}.json"
-    config_already_made = os.path.exists(guild_config_path)
-    with open("config.json", "r") as f:
-        template_config = json.load(f)["template"]["guild"]
+    gconf = await get_guild_config(guild.id)
+    if not gconf:
+        config_already_made = False
+    else:
+        config_already_made = True
+
+    conf = get_global_config()
+    template_config = conf["template"]["guild"]
+
     if not config_already_made:
         os.makedirs(os.path.dirname(guild_config_path), exist_ok=True)
-        with open(guild_config_path, "w") as f:
-            json.dump(template_config, f, indent=4)
+        await make_guild_config(guild.id, template_config)
     else:
-        with open(guild_config_path, "r") as f:
-            existing_config = json.load(f)
-        updated_config = recursive_update(existing_config, template_config) #todo fix the thing lol
-        with open(guild_config_path, "w") as f:
-            json.dump(updated_config, f, indent=4)
+        existing_config = await get_guild_config(guild.id)
+        updated_config = recursive_update(existing_config, template_config)
+        await make_guild_config(guild.id, updated_config)
     stage2 = discord.Embed(
         title="Initialization Finished!",
         description="No errors found",
@@ -488,7 +517,22 @@ async def on_guild_join(guild):
         value="Permissions\n> The bot has sufficient permissions to work!\n"
                 f"Config\n> {'A configuration file already exists and has been updated with missing keys' if config_already_made else 'A configuration file has been created for your guild!'}"
     )
-    await guild.owner.send(embed=stage2)
+    yield stage2
+loaded_cogs = set()
+
+
+@client.event
+async def on_guild_join(guild):
+    owner = guild.owner
+    if not owner:
+        return 
+    try:
+        async for embed in setup_guild(guild, type=2):
+            await owner.send(embed=embed)
+    except Exception as e:
+        logger.error(f"An error occurred while trying to setup {guild.name}: {e}")
+
+
 @client.event
 async def on_ready():
     global start_time

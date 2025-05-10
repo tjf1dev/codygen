@@ -619,20 +619,8 @@ class level(commands.Cog):
             return
         if user==None:
             user = ctx.author
-        data_path = f"data/guilds/{ctx.guild.id}.json"
-        try:
-            with open(data_path, "r") as f:
-                data = json.load(f)
-                
-                data.setdefault("stats", {}).setdefault("level", {}).setdefault("users", {}).setdefault(str(user.id), {"xp": 0})
-                data["stats"]["level"]["users"][str(user.id)]["xp"] = xp
-
-                with open(data_path, "w") as f:
-                    json.dump(data, f, indent=4)
-
-                await ctx.reply(f"set {user.name}'s XP to {xp}.",ephemeral=True)
-        except FileNotFoundError:
-            await ctx.reply("guild config not found. please report this to the administrators. (/settings init)")
+        await set_guild_config_key(ctx.guild.id, f"stats.level.users.{user.id}.xp", xp) #TODO this will also change in the new config system, im marking every new change of mine
+        await ctx.reply(f"set {user.name}'s XP to {xp}.",ephemeral=True)
     @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @level.command(name="refresh", description="synchronizes all levels and grants role rewards. administrator only")
@@ -648,8 +636,7 @@ class level(commands.Cog):
 
         data_path = f"data/guilds/{ctx.guild.id}.json"
         try:
-            with open(data_path, "r") as f:
-                data = json.load(f)
+            data = await get_guild_config(ctx.guild.id)
 
             users = data.get("stats", {}).get("level", {}).get("users", {})
             guild = ctx.guild
@@ -674,9 +661,6 @@ class level(commands.Cog):
                             if role in user.roles:
                                 await user.remove_roles(role)
                                 affected_users.append(f"{user.mention} ({level} • {xp}xp) - removed role <@&{role.id}>")
-
-            with open(data_path, "w") as f:
-                json.dump(data, f, indent=4)
 
             end_time = time.time()
             elapsed_time = end_time - start_time

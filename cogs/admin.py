@@ -33,6 +33,7 @@ class admin(commands.Cog):
         else:
             with open(f"data/guilds/{ctx.guild.id}.json", "w") as f:
                 json.dump(get_config_defaults("guild"), f, indent=4)
+            await make_guild_config(ctx.guild.id, get_config_defaults()["guild"]) #TODO THIS WILL CHANGE WITH THE NEW CONFIG SYSTEM I WILL FORGET ABOUT THIS
             await ctx.reply(f"config for {ctx.guild.name} regenerated successfully")
     @commands.is_owner()
     @admin.command(name="purgetickets",description="purges all tickets in the guild. not recommended if there are active tickets. NOTE: THIS DOES NOT REMOVE CHANNELS")
