@@ -478,7 +478,7 @@ class level(commands.Cog):
         await set_guild_config_key(ctx.guild.id, f"modules.level.boost.role.{role.id}.expires", expires)
     @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
     @level.command(name="get", description="Check your current level.")
-    async def level_get(self, ctx: commands.Context, user:discord.User=None):
+    async def level_get(self, ctx: commands.Context, user:discord.Member=None):
         if user==None:
             user = ctx.author
         try:

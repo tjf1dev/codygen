@@ -273,54 +273,6 @@ class utility(commands.Cog):
             color=Color.purple
         )
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot),ephemeral=True)    
-    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
-    @utility.command(name="guild", description="view information about this server.")
-    async def guild(self, ctx: commands.Context):
-        guild = ctx.guild
-        roles = await guild.fetch_roles()
-        members = guild.members
-        channels = await guild.fetch_channels()
-        bots = []
-        users = []
-        for m in members:
-            if m.bot:
-                bots.append(m)
-            else:
-                users.append(m)
-        voice_channels = []
-        text_channels = []
-        other_channels = []
-        for c in channels:
-            if c.type == discord.ChannelType.voice:
-                voice_channels.append(c)
-            if c.type == discord.ChannelType.text:
-                text_channels.append(c)
-            else:
-                if c.type != discord.ChannelType.category:
-                    other_channels.append(c)
-
-        
-        e = discord.Embed(
-            title=f"",
-            description=f"# about {guild.name}\n"
-                f"id: {guild.id}\n"
-                f"owner: {guild.owner.mention}\n"
-                f"roles: {len(roles)}\n"
-                f"[icon url](<{guild.icon.url}>)\n"
-                f"## channels\n"
-                f"total: {len(channels)}\n"
-                f"text: {len(text_channels)}\n"
-                f"voice: {len(voice_channels)}\n"
-                f"other: {len(other_channels)}\n\n"
-                f"## members\n"
-                f"total: {len(members)}\n"
-                f"bots: {len(bots)}\n"
-                f"users: {len(users)}",
-            color=Color.white
-        )
-        e.set_thumbnail(url=guild.icon.url)
-        await ctx.reply(embed=e)
-    @commands.hybrid_command(name="add", description="add codygen to your server, or install it to your profile", aliases=["invite"])
     async def add(self, ctx: commands.Context):
         bid = os.getenv("APP_ID")
         guild = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
