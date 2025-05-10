@@ -11,8 +11,8 @@ from discord.ext import commands
 from discord import app_commands
 from typing import AsyncGenerator, Union
 from colorama import Fore
-from extensions.colors import Color
-from extensions.logger import logger
+from ext.colors import Color
+from ext.logger import logger
 io # its being used in different cogs, im marking it here so vscode wont annoy me with 'unused'
 requests # same as io
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
@@ -430,7 +430,7 @@ async def on_command_error(ctx: commands.Context, error):
         await ctx.send(embed=e,ephemeral=True)  # Handle other errors normally
         raise commands.errors.CommandError(str(error))
 
-async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Union[discord.Embed, list[discord.Embed], bool], None, bool]:
+async def setup_guild(guild: discord.Guild, type: int = 1) -> AsyncGenerator[Union[discord.Embed, list[discord.Embed], bool], bool]:
     """
         Setup (initalize) a guild.
         Replaces on_guild_join and /settings init functions, and is shared between them.
@@ -699,6 +699,7 @@ async def help_command(ctx: commands.Context):
         color=Color.purple
     )
     await ctx.reply(embed=embed, view=HelpHomeView(client),ephemeral=True)
+#todo refresh the support system
 @app_commands.allowed_installs(guilds=False,users=True)
 @app_commands.allowed_contexts(guilds=False,dms=True,private_channels=True)
 @client.hybrid_command(name="support",description="contact the bot developers.")

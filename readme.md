@@ -9,7 +9,8 @@
 ## about the app
 > codygen is a small multipurpose Discord bot made by [tjf1dev](https://github.com/tjf1dev)
 > made in discord.py <3
-
+## support
+support me! if you want to, become [tjf1dev's sponsor!](https://github.com/sponsors/tjf1dev)... or just press the sponsor button above :3
 ## contributions
 > feel free to contribute to the bot
 ![contributors](https://readme-contribs.as93.net/contributors/tjf1dev/codygen)
