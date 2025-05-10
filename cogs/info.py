@@ -9,7 +9,12 @@ class Info(commands.Cog):
         pass
     @info.command(name="user", description="view information about a user.")
     async def user(self, ctx: commands.Context, user: discord.Member | discord.User = None):
-        if not user: user = ctx.author
+        if not user: 
+            ref = ctx.message.reference
+            if ref:
+                user = ref.resolved.author
+            else:
+                user = ctx.author
         if user.avatar:
             avatar = f"[avatar]({user.avatar.url})"
         else:
@@ -68,6 +73,7 @@ class Info(commands.Cog):
                 f"id: {guild.id}\n"
                 f"owner: {guild.owner.mention}\n"
                 f"roles: {len(roles)}\n"
+                f"created: <t:{round(guild.created_at.timestamp())}:R> (<t:{round(guild.created_at.timestamp())}:D>)\n"
                 f"[icon url](<{guild.icon.url}>)\n"
                 f"## channels\n"
                 f"total: {len(channels)}\n"
