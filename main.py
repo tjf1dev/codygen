@@ -97,7 +97,10 @@ async def custom_api_request(bot: commands.Bot, endpoint: str, method: str = aio
     async with aiohttp.ClientSession() as session:
         async with session.request(method.__name__, url, headers=headers) as response:
             return await response.json()
-
+async def request(url: str, method: str = aiohttp.ClientSession.get, headers: dict = {}) -> dict:
+    async with aiohttp.ClientSession() as session:
+        async with session.request(method.__name__, url, headers=headers) as response:
+            return await response.json()
 def get_required_env() -> list:
     r = []
     with open(".env.template","r") as f:

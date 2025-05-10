@@ -1,4 +1,5 @@
 from main import *
+import subprocess
 class admin(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -49,6 +50,36 @@ class admin(commands.Cog):
                 await ctx.reply("done")
         except Exception as e:
             await ctx.reply(f"error: {str(e)}")
-
+    @commands.is_owner()
+    @admin.command(name="update", description="Attempt to automatically update codygen through git.")
+    async def update(self, ctx: commands.Context, version: str = None):
+        try:
+            logger.info(f"Attempting to update codygen to version: {version}")
+            git_command = ["git", "pull"]
+            result = subprocess.run(git_command, capture_output=True, text=True, check=True)
+            uptodate = discord.Embed(
+                description="codygen is already up to date.",
+                color=Color.white
+            )
+            e = discord.Embed(
+                description="codygen successfully updated.\nrestart now to apply changes.",
+                color=Color.positive
+            )
+            if result.stdout.strip() == "Already up to date.":
+                embed = uptodate
+                content = None
+            else:
+                embed = e
+                content = f"```{result.stdout}```"
+                if version:
+                    async with aiofiles.open('config.json', 'r') as f:
+                        data = json.loads(await f.read())
+                        data["version"] = version
+                    async with aiofiles.open('config.json', 'r') as f: 
+                        f.write(json.dumps(data, indent=4))
+            await ctx.reply(content,embed=embed)
+            
+        except subprocess.CalledProcessError as e:
+            await ctx.reply(f"```{e.stderr}```")
 async def setup(bot):
     await bot.add_cog(admin(bot))

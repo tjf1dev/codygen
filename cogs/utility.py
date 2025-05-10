@@ -351,6 +351,7 @@ class utility(commands.Cog):
     @commands.Cog.listener("on_message")
     async def on_message(self, message: discord.Message):
         if message.guild is None:
+            logger.debug("not in a guild")
             return
 
         if message.guild.id != 1333785291584180244:
@@ -371,6 +372,12 @@ class utility(commands.Cog):
                 if sticker:
                     await message.reply(stickers=[sticker])
                     logger.debug("Replied with sticker because a media URL was sent and user can't embed")
+                else:
+                    logger.debug("Sticker not found")
+            else:
+                logger.debug("User can embed links")
+        else:
+            return
 
 
 async def setup(bot):

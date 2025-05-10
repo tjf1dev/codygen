@@ -38,10 +38,74 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="randomword", description="get random word from english dictionary")
     async def randomword(self, ctx: commands.Context):
+        await ctx.interaction.response.defer()
         with open("assets/randomword.txt", "r") as file:
             text = file.read()
             words = list(map(str, text.split()))
-            await ctx.reply(random.choice(words))
+            word_found = False
+            iteration = 0
+            while not word_found:
+                iteration += 1
+                if iteration >= 5:
+                    word_found = True
+                word = random.choice(words)
+                entry: list | dict = await request(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}")
+                if isinstance(entry, dict):
+                    if entry.get("title", None).strip().lower() == "no definitions found": 
+                        entry = None
+                if entry:
+                    word_found = True
+                    meanings = entry[0].get("meanings", [{}])
+                    first_meaning = meanings[0]
+                    partOfSpeech = first_meaning.get("partOfSpeech", "unknown")
+                    definitions = first_meaning.get("definitions", [{}])
+                    first_definition = definitions[0].get("definition","")
+                    e = discord.Embed(
+                        description=f"# {word}\n"
+                        f"-# as {partOfSpeech}: \n"
+                        f"**`{first_definition}`**\n-# for more definitions of this word, check </fun word:1367182065564520484>"
+                    )
+                if not entry:
+                    e = discord.Embed(
+                        description=f"# {word}\ncouldn't even find a definition for this one."
+                    )
+        await ctx.reply(embed=e)
+    @fun_group.command(name="word", description="get definition of an english word")
+    async def word(self, ctx: commands.Context, *, word: str):
+        logger.debug(f"getting the word: {word}")
+        entry: list | dict = await request(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}")
+        found = False
+        embeds = []
+        if isinstance(entry, dict):
+            if entry.get("title", None).strip().lower() == "no definitions found": 
+                entry = None
+        if entry:
+            found = True
+            meanings = entry[0].get("meanings", [{}])
+            logger.debug(f"entry: {entry}")
+            e1 = discord.Embed(
+                description=f"# {word}\nfound {len(meanings)} meanings for this word."
+            )
+            if meanings == [{}]:
+                found = False
+            embeds.append(e1)
+            for m in meanings:
+                partOfSpeech = m.get("partOfSpeech", "unknown")
+                definitions = m.get("definitions", [{}])
+                desc = f"-# as {partOfSpeech}\n"
+                for d in definitions:
+                    definition = d.get("definition")
+                    desc += f"**`{definition}`**\n\n"
+                e = discord.Embed(
+                    description=desc
+                )
+                embeds.append(e)
+        if not entry:
+            e = discord.Embed(
+                description=f"couldn't find a definition for this word."
+            )
+            embeds.append(e)
+        await ctx.reply(embeds=embeds, ephemeral = False if found else True)    
     @verify()
     @fun_group.command(name="cute", description="cute command")
     async def cute(self, ctx: commands.Context, user: discord.User = None):
