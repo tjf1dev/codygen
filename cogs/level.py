@@ -21,7 +21,6 @@ def split_embed_description(lines, max_length=4096) -> list:
         chunks.append("\n".join(current))
 
     return chunks
-
 def _old_xp_to_level(xp):
     level = 1
     xp_needed = 100
