@@ -7,11 +7,8 @@
 > [Invite codygen to your server](https://discord.com/oauth2/authorize?client_id=1337509693874245682&permissions=8&integration_type=0&scope=bot)
 
 ## about the app
-> codygen is a small multipurpose Discord bot
-
-> created and maintained by [tjf1dev](https://github.com/tjf1dev)
-
-> in python ([discord.py](https://github.com/rapptz/discord.py)) <3
+> codygen is a small multipurpose Discord bot made by [tjf1dev](https://github.com/tjf1dev)
+> made in discord.py <3
 ## support
 support me! if you want to, become [tjf1dev's sponsor!](https://github.com/sponsors/tjf1dev)... or just press the sponsor button above :3
 ## contributions

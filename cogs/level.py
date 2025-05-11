@@ -20,6 +20,7 @@ def split_embed_description(lines, max_length=4096) -> list:
 
     if current:
         chunks.append("\n".join(current))
+
     return chunks
 
 
@@ -27,10 +28,12 @@ def _old_xp_to_level(xp):
     level = 1
     xp_needed = 100
     increment = 50
+
     while xp >= xp_needed:
         xp -= xp_needed
         level += 1
         xp_needed += increment
+
     return level
 
 
@@ -286,13 +289,7 @@ class level(commands.Cog):
         guild_config = await get_guild_config(ctx.guild.id)
         boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
         logger.debug("all boosts gathered")
-        if not isinstance(ctx.author, discord.Member):
-            fail = discord.Embed(
-                description="# something went wrong."
-                "user is not instance of discord.Member."
-            )
-            await ctx.reply(embed=fail)
-            return
+
         highest_boost_value = 0
         highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
 

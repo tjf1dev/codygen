@@ -105,8 +105,8 @@ class HelpHomeView(discord.ui.View):
 
 
 class utility(commands.Cog):
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
+    def __init__(self, bot):
+        self.bot: commands.Bot = bot
         self.description = "tools that can be helpful sometimes!"
 
     @tasks.loop(hours=24)
@@ -371,26 +371,6 @@ class utility(commands.Cog):
             inline=True,
         )
         await ctx.reply(embed=e, ephemeral=False)
-
-    @verify()
-    @commands.hybrid_command(
-        name="about",
-        description="shows information about codygen, and its contributors.",
-    )
-    async def about(self, ctx: commands.Context):
-        logger.debug("listing contributors now...")
-        url = "https://api.github.com/repos/tjf1dev/codygen/contributors"
-        headers = {"Authorization": f"token {os.getenv("GITHUB_PAT")}"}
-        contributors: list = await request(url, headers=headers)
-        desc = (
-            "# codygen\nfounder/lead developer: [`tjf1dev`](<https://github.com/tjf1dev>)\nwant to help make codygen? [`github repository`](<https://github.com/tjf1dev/codygen>)\n"
-            "## contributors\n"
-        )
-        for c in contributors:
-            desc += f"[`{c["login"]}`](<{c["url"]}>): `{c["contributions"]} contribution{"s" if c["contributions"] > 1 else ""}`\n"
-        desc += "\nthank you to everyone who contributed to codygen, and everyone who uses it. without you, all of this wouldn't be possible. </3"
-        e = discord.Embed(description=desc, color=Color.accent)
-        await ctx.reply(embed=e)
 
     @verify()
     @commands.hybrid_command(
