@@ -19,11 +19,6 @@ def split_embed_description(lines, max_length=4096) -> list:
 
     if current:
         chunks.append("\n".join(current))
-<<<<<<< HEAD
-
-    return chunks
-=======
->>>>>>> 738dc91 (git is having problems again idk)
 
     return chunks
 
@@ -31,20 +26,12 @@ def _old_xp_to_level(xp):
     level = 1
     xp_needed = 100
     increment = 50
-<<<<<<< HEAD
-
-=======
     
->>>>>>> 738dc91 (git is having problems again idk)
     while xp >= xp_needed:
         xp -= xp_needed
         level += 1
         xp_needed += increment
-<<<<<<< HEAD
-
-=======
     
->>>>>>> 738dc91 (git is having problems again idk)
     return level
     
 def xp_to_level(xp) -> int:

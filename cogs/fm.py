@@ -1,8 +1,21 @@
 import base64
 import hmac
-
+import aiohttp
+from PIL import Image
+from io import BytesIO
+import asyncio
 from main import *
 
+async def get_average_color(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            content = await resp.read()
+            img = Image.open(BytesIO(content)).convert('RGB')
+            pixels = list(img.getdata())
+            r = sum(p[0] for p in pixels) // len(pixels)
+            g = sum(p[1] for p in pixels) // len(pixels)
+            b = sum(p[2] for p in pixels) // len(pixels)
+            return (r, g, b)
 
 class lastfmAuthView(discord.ui.View):
     @discord.ui.button(label="Login", style=discord.ButtonStyle.primary)

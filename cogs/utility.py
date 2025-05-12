@@ -314,12 +314,8 @@ class utility(commands.Cog):
         await ctx.reply(embed=e,ephemeral=False)
     @verify()
     @commands.hybrid_command(
-<<<<<<< HEAD
-        name="help", description="shows useful info about the bot."
-=======
         name="help",
         description="shows useful info about the bot."
->>>>>>> 738dc91 (git is having problems again idk)
     )
     async def help_command(self, ctx: commands.Context):
         embed = discord.Embed(
