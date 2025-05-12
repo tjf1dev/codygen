@@ -61,7 +61,9 @@ async def set_guild_config_key(guild_id: str | int, key: str, value) -> bool:
         async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
             config = json.loads(await f.read())
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.error(f"{guild_id}'s config has encountered an error: {type(e).__name__}: {e}")
+        logger.error(
+            f"{guild_id}'s config has encountered an error: {type(e).__name__}: {e}"
+        )
         return False
         # config = get_config_defaults()
 
