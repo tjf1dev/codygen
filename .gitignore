@@ -1,6 +1,7 @@
 .env
 
 __pycache__
+venv
 
 stats/stats.json
 stats.json
