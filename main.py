@@ -9,11 +9,12 @@
 import discord, os, aiofiles, dotenv, random, io, json, time, psutil, datetime, logging, requests, asyncio, hashlib, base64, sys, quart, aiohttp
 from discord.ext import commands
 from discord import app_commands
-from typing import AsyncGenerator, Union
+from typing import AsyncGenerator, Union, Optional, Dict, Any
 from colorama import Fore
 from ext.colors import Color
 from ext.logger import logger
 from ext.web import app
+import ext.errors
 
 io  # its being used in different cogs, im marking it here so vscode wont annoy me with 'unused'
 requests  # same as io
@@ -116,11 +117,17 @@ async def custom_api_request(
 
 
 async def request(
-    url: str, method: str = aiohttp.ClientSession.get, headers: dict = {}
-) -> dict:
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    json: Optional[Dict[str, str]] = None,
+    **kwargs: Any,
+) -> aiohttp.ClientResponse:
+    if headers is None:
+        headers = {}
     async with aiohttp.ClientSession() as session:
-        async with session.request(method.__name__, url, headers=headers) as response:
-            return await response.json()
+        async with session.request(method, url, headers=headers, **kwargs) as response:
+            return response
 
 
 def get_required_env() -> list:

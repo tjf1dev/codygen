@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import asyncio, re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+import ext.errors
 
 
 def parse_msglink(link: str):
@@ -111,8 +112,8 @@ class utility(commands.Cog):
 
     @tasks.loop(hours=24)
     async def countdown_loop(self):
-        target_date = datetime(datetime.now().year, 6, 5)
-        channel = self.bot.get_channel(1333785292351606830)
+        target_date = datetime(datetime.now().year, 6, 4)
+        channel = self.bot.get_channel(1374402713118572635)
         now = datetime.now()
         if now > target_date:
             await channel.send("deltarune tomorrow :3 (it's out)")
@@ -410,10 +411,61 @@ class utility(commands.Cog):
         await ctx.reply(
             embed=discord.Embed(
                 title="",
-                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py, line 290](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py#L290-L295>))",
+                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py, line 403](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py#L403-L408>))",
                 color=Color.negative,
             )
         )
+
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @commands.hybrid_command(
+        name="about",
+        description="view detailed information about codygen, including contributors, etc.",
+    )
+    async def about(self, ctx: commands.Context):
+        api_url: str = get_global_config()["commands"].get("about", {"repo": ""})[
+            "repo"
+        ]
+        if not api_url.startswith("https://api.github.com/"):
+            raise ext.errors.MisconfigurationError(
+                "commands > about > repo: please make sure the url is using https and pointing to the github api of the current repository. e.g: 'https://api.github.com/tjf1dev/codygen' (do not append any endpoint)"
+            )
+        if not api_url.endswith("/"):
+            api_url += "/"
+        api_url += "contributors"
+        headers = {}
+        token = os.getenv("GITHUB_PAT")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(api_url, headers=headers) as res:
+                    if res.status != 200:
+                        text = await res.text()
+                        raise ext.errors.DefaultError(f"HTTP {res.status}: {text}")
+                    data = await res.json()
+            except aiohttp.ClientConnectionError as e:
+                raise ext.errors.DefaultError(
+                    f"connection closed while reading json: {e}"
+                )
+            except aiohttp.ContentTypeError:
+                text = await res.text()
+                raise ext.errors.DefaultError(f"response is not json: {text}")
+            except Exception as e:
+                raise ext.errors.DefaultError(f"unexpected error parsing json: {e}")
+
+        contributors = ""
+        for c in data:
+            contributors += f"[`{c["login"]}`](<{c["html_url"]}>): {c["contributions"]} contributions\n"
+
+        e = discord.Embed(
+            description=f"""
+            # codygen\n### made by [`tjf1`](<https://github.com/tjf1dev>)\n## contributors\n{contributors}\n## support\nit takes a long time making a bot, any support would be appreciated! :3\n### [`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n\nthank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3
+            """,
+            color=Color.accent,
+        )
+        await ctx.reply(embed=e)
 
     # now some exclusives i need for my server
     # guild id will be hardcoded
@@ -422,7 +474,6 @@ class utility(commands.Cog):
     @commands.Cog.listener("on_message")
     async def on_message(self, message: discord.Message):
         if message.guild is None:
-            logger.debug("not in a guild")
             return
 
         if message.guild.id != 1333785291584180244:
@@ -437,22 +488,17 @@ class utility(commands.Cog):
         urls = url_pattern.findall(message.content)
 
         if urls:
-            logger.debug(f"User sent an image/GIF link: {urls[0]}")
             perms = message.channel.permissions_for(message.author)
-            logger.debug(
-                f"attach_files: {perms.attach_files}, embed_links: {perms.embed_links}"
-            )
+            return
             if not perms.embed_links:
                 sticker = await message.guild.fetch_sticker(1370752176787558451)
                 if sticker:
                     await message.reply(stickers=[sticker])
-                    logger.debug(
-                        "Replied with sticker because a media URL was sent and user can't embed"
-                    )
+                    return
                 else:
-                    logger.debug("Sticker not found")
+                    return
             else:
-                logger.debug("User can embed links")
+                return
         else:
             return
 
