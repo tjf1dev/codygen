@@ -165,46 +165,53 @@ class ConfirmBoost(discord.ui.View):
 
     async def abort_button(self, interaction: discord.Interaction):
         await interaction.response.send_message(f"action cancelled.", ephemeral=True)
-
-
-class level(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.description = "Track and reward users for activity"
-
-    @commands.Cog.listener("on_message")
-    async def level_event(self, message):
-        guild = message.guild
-        if message.author.bot:
-            return
-        user = message.author
+async def send_levelup(user: discord.Member, guild: discord.Guild, xp, new_xp):
+    """
+    Sends a levelup message to the channel configured in the guild config.
+    """
+    guild_config = await get_guild_config(guild.id)
+    channel_id = (
+        guild_config.get("modules", {})
+        .get("level", {})
+        .get("levelup", {})
+        .get("channel")
+    )
+    if not channel_id:
+        return
+    channel: discord.TextChannel = await guild.fetch_channel(channel_id)
+    if not channel:
+        return
+    old_level = xp_to_level(xp- int(new_xp))
+    new_level = xp_to_level(xp)
+    embed = discord.Embed(
+        title="",
+        description=f"{user.mention}: `{old_level}` > `{new_level}`, `{xp}xp`\n",
+        color=discord.Color.green(),
+    )
+    embed.set_thumbnail(url=user.display_avatar.url)
+    await channel.send(embed=embed)
+async def xp(user: discord.Member, guild: discord.Guild):
+    """
+        Main handler for xp gain
+        This takes boosts to account, levelup message is sent seperately
+    """
+    if user.bot:
+        return
+    per_message_default = 10
+    try:
         guild_config = await get_guild_config(guild.id)
-        per_message_default = get_config_defaults()["modules"]["level"]["per_message"]
+        users = guild_config.get("stats", {}).get("level", {}).get("users", {})
         xp_per_message = (
             guild_config.get("modules", {})
             .get("level", {})
             .get("per_message", per_message_default)
         )
-        channel_id = (
-            guild_config.get("modules", {})
-            .get("level", {})
-            .get("levelup", {})
-            .get("channel")
-        )
-        if not channel_id:
-            return
-        channel = await self.bot.fetch_channel(channel_id)
-
-        users = guild_config.get("stats", {}).get("level", {}).get("users", {})
-        user_xp = users.get(str(message.author.id), {}).get("xp", 0)
         boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        logger.debug("all boosts gathered")
         global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
         if float(global_boost.get("expires")) < time.time():
             global_boost_value = 0
         else:
             global_boost_value = global_boost.get("percentage")
-
         role_boosts: dict = boosts.get("role", {})
         user_boosts: dict = boosts.get("user", {})
         highest_boost = global_boost_value
@@ -221,20 +228,24 @@ class level(commands.Cog):
             + role_boost.get("percentage")
         )
         xp_with_boost = xp_per_message * (1 + highest_boost / 100)
+        user_xp = users.get(str(user.id), {}).get("xp", 0)
+
+        logger.debug(
+            f"{user.name} now has {user_xp}xp"
+        )
         await set_guild_config_key(
             guild.id,
-            f"stats.level.users.{message.author.id}.xp",
+            f"stats.level.users.{user.id}.xp",
             int(user_xp + xp_with_boost),
         )
 
         old_level = xp_to_level(
-            guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"]
+            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
             - int(xp_with_boost)
         )
         new_level = xp_to_level(
-            guild_config["stats"]["level"]["users"][str(message.author.id)]["xp"]
+            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
         )
-
         try:
             level_roles = guild_config["modules"]["level"]["rewards"]
             for role_level, role_id in level_roles.items():
@@ -248,20 +259,38 @@ class level(commands.Cog):
                             await user.remove_roles(role)
         except FileNotFoundError:
             pass
+        try:
+            level_roles = guild_config["modules"]["level"]["rewards"]
+            for role_level, role_id in level_roles.items():
+                role = guild.get_role(role_id)
+                if role is not None:
+                    if new_level >= int(role_level):
+                        if role not in user.roles:
+                            await user.add_roles(role)
+                    else:
+                        if role in user.roles:
+                            await user.remove_roles(role)
+        except FileNotFoundError:
+            pass
+    except Exception as e:
+        logger.error(f"Error in xp handler: {e}")
+        logger.error(traceback.format_exc())
+        return
+class level(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.description = "Track and reward users for activity"
 
-        if new_level <= old_level:
-            return
 
-        await channel.send(
-            f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
-            f"\nxp boost: **{highest_boost}%**!"
-            if highest_boost != 0
-            else ""
-        )
-        logger.debug(
-            f"{user.name} ({user.id}) in {guild.id} has recieved {xp_with_boost}xp"
-        )
-
+    @commands.Cog.listener("on_message")
+    async def level_event(self, message):
+        await xp(message.author, message.guild)
+    # await channel.send(
+    #     f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
+    #     f"\nxp boost: **{highest_boost}%**!"
+    #     if highest_boost != 0
+    #     else ""
+    # )
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
@@ -288,19 +317,23 @@ class level(commands.Cog):
     async def boosts(self, ctx: commands.Context):
         guild_config = await get_guild_config(ctx.guild.id)
         boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        logger.debug("all boosts gathered")
+        # logger.debug("all boosts gathered")
 
         highest_boost_value = 0
         highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
 
         global_boost = boosts.get("global", {"percentage": 0, "expires": 0})
-        if global_boost["expires"] > time.time():
+        if global_boost["expires"] > time.time() or global_boost["expires"] == -1:
             highest_boost_value = global_boost["percentage"]
             highest_boost_type = 0
+        else:
+            logger.warning(
+                f"global boost expired: {global_boost['expires']} < {time.time()}"
+            )
 
         role_boosts: dict = boosts.get("role", {})
         user_boosts: dict = boosts.get("user", {})
-        logger.debug("role and user boosts gathered")
+        # logger.debug("role and user boosts gathered")
 
         for role in ctx.author.roles:
             role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
@@ -407,7 +440,7 @@ class level(commands.Cog):
         neutral_confirm = discord.Embed(
             title="",
             color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill expire in {timestamp(global_boost['expires'],"R")}",
+            description=f"### almost done!\nnow please confirm to apply the {percentage}% global boost.\nwill expire in {timestamp(expires, 'R')}",
         )
         neutral_infinite_already_exists = discord.Embed(
             title="",
@@ -815,6 +848,7 @@ class level(commands.Cog):
 
             try:
                 await ctx.reply(file=discord.File(img_path))
+
             finally:
                 if os.path.exists(img_path):
                     os.remove(img_path)
@@ -920,3 +954,4 @@ class level(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(level(bot))
+#test

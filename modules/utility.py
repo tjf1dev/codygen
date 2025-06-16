@@ -44,6 +44,21 @@ class HelpSelect(discord.ui.Select):
         super().__init__(
             placeholder="Select a cog", max_values=1, min_values=1, options=options
         )
+    # hey, for self-hosted users: #! please don’t remove this command
+    # i get it, you want your own bot, but at least give me some credit for this
+    # if you really want your own bot, make one yourself
+    # tip: codygen works under the MIT license. #* REMOVING CREDIT IS ILLEGAL.
+    # you can do whatever you want with it, but #* if you redistribute this code without credit, you’re BREAKING THE LAW.
+    # enjoy using codygen!
+    @commands.command()
+    async def whoami(self, ctx: commands.Context):
+        await ctx.reply(
+            embed=discord.Embed(
+                title="",
+                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py, line 47](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py#L47-L52>))",
+                color=Color.negative,
+            )
+        )
 
     async def callback(self, interaction: discord.Interaction):
         embed = discord.Embed(title=f"codygen - {self.values[0]}", color=Color.white)
@@ -109,36 +124,36 @@ class utility(commands.Cog):
     def __init__(self, bot):
         self.bot: commands.Bot = bot
         self.description = "tools that can be helpful sometimes!"
+    # deltarune,, nevr heard of this game smh
+    # @tasks.loop(hours=24)
+    # async def countdown_loop(self):
+    #     target_date = datetime(datetime.now().year, 6, 4)
+    #     channel = self.bot.get_channel(1374402713118572635)
+    #     now = datetime.now()
+    #     if now > target_date:
+    #         await channel.send("deltarune tomorrow :3 (it's out)")
+    #         self.countdown_loop.stop()
+    #     else:
+    #         days_left = (target_date - now).days
+    #         if days_left == 1:
+    #             await channel.send("deltarune tomorrow")
+    #         else:
+    #             await channel.send(f"{days_left} days until deltarune")
 
-    @tasks.loop(hours=24)
-    async def countdown_loop(self):
-        target_date = datetime(datetime.now().year, 6, 4)
-        channel = self.bot.get_channel(1374402713118572635)
-        now = datetime.now()
-        if now > target_date:
-            await channel.send("deltarune tomorrow :3 (it's out)")
-            self.countdown_loop.stop()
-        else:
-            days_left = (target_date - now).days
-            if days_left == 1:
-                await channel.send("deltarune tomorrow")
-            else:
-                await channel.send(f"{days_left} days until deltarune")
-
-    @countdown_loop.before_loop
-    async def before_countdown(self):
-        await self.bot.wait_until_ready()
-        now = datetime.now()
-        next_midnight = datetime.combine(
-            now.date() + timedelta(days=1), datetime.min.time()
-        )
-        seconds_until_midnight = (next_midnight - now).total_seconds()
-        await asyncio.sleep(seconds_until_midnight)
+    # @countdown_loop.before_loop
+    # async def before_countdown(self):
+    #     await self.bot.wait_until_ready()
+    #     now = datetime.now()
+    #     next_midnight = datetime.combine(
+    #         now.date() + timedelta(days=1), datetime.min.time()
+    #     )
+    #     seconds_until_midnight = (next_midnight - now).total_seconds()
+    #     await asyncio.sleep(seconds_until_midnight)
 
     @commands.Cog.listener()
     async def on_ready(self):
-        if not self.countdown_loop.is_running():
-            self.countdown_loop.start()
+        # if not self.countdown_loop.is_running():
+        #     self.countdown_loop.start()
         logger.info(f"{self.__class__.__name__}: loaded.")
 
     @commands.hybrid_group(
@@ -384,7 +399,11 @@ class utility(commands.Cog):
             color=Color.purple,
         )
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot), ephemeral=True)
-
+    @verify()
+    @commands.hybrid_command(
+        name="add",
+        description="shows useful info about the bot"
+    )
     async def add(self, ctx: commands.Context):
         bid = os.getenv("APP_ID")
         guild = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
@@ -400,21 +419,6 @@ class utility(commands.Cog):
         )
         await ctx.reply(embed=e, ephemeral=False)
 
-    # hey, for self-hosted users: #! please don’t remove this command
-    # i get it, you want your own bot, but at least give me some credit for this
-    # if you really want your own bot, make one yourself
-    # tip: codygen works under the MIT license. #* REMOVING CREDIT IS ILLEGAL.
-    # you can do whatever you want with it, but #* if you redistribute this code without credit, you’re BREAKING THE LAW.
-    # enjoy using codygen!
-    @commands.command()
-    async def whoami(self, ctx: commands.Context):
-        await ctx.reply(
-            embed=discord.Embed(
-                title="",
-                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py, line 403](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py#L403-L408>))",
-                color=Color.negative,
-            )
-        )
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -423,16 +427,14 @@ class utility(commands.Cog):
         description="view detailed information about codygen, including contributors, etc.",
     )
     async def about(self, ctx: commands.Context):
-        api_url: str = get_global_config()["commands"].get("about", {"repo": ""})[
+        repo: str = get_global_config()["commands"].get("about", {"repo": ""})[
             "repo"
         ]
-        if not api_url.startswith("https://api.github.com/"):
+        if not len(repo.split("/")) == 2:
             raise ext.errors.MisconfigurationError(
-                "commands > about > repo: please make sure the url is using https and pointing to the github api of the current repository. e.g: 'https://api.github.com/tjf1dev/codygen' (do not append any endpoint)"
+                f"commands > about > repo: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split("/")}"
             )
-        if not api_url.endswith("/"):
-            api_url += "/"
-        api_url += "contributors"
+        api_url = f"https://api.github.com/repos/{repo}/contributors"
         headers = {}
         token = os.getenv("GITHUB_PAT")
         if token:
@@ -461,7 +463,13 @@ class utility(commands.Cog):
 
         e = discord.Embed(
             description=f"""
-            # codygen\n### made by [`tjf1`](<https://github.com/tjf1dev>)\n## contributors\n{contributors}\n## support\nit takes a long time making a bot, any support would be appreciated! :3\n### [`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n\nthank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3
+            # codygen\n
+            ### made by [`tjf1`](<https://github.com/tjf1dev>)\n
+            ## contributors\n{contributors}
+            ## support\n
+            it takes a long time making a bot, any support would be appreciated! :3\n
+            ### [`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n\n
+            thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3
             """,
             color=Color.accent,
         )

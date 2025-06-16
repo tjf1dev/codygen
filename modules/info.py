@@ -1,6 +1,16 @@
 from main import *
-
-
+import PIL
+from PIL import Image
+from io import BytesIO
+async def avg_color(url):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            data = await response.read()
+    img = Image.open(BytesIO(data)).convert('RGB')
+    img = img.resize((1, 1))
+    average_color = img.getpixel((0, 0))
+    return average_color
 class info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -23,27 +33,29 @@ class info(commands.Cog):
             else:
                 user = ctx.author
         if user.avatar:
-            avatar = f"[avatar]({user.avatar.url})"
+            avatar = f"[`avatar`]({user.avatar.url})"
         else:
             avatar = ""
         if user.banner:
-            banner = f"[banner](<{user.banner.url}>)"
+            banner = f"[`   banner`](<{user.banner.url}>)"
         else:
             banner = ""
+        col = await avg_color(user.avatar.url) if user.avatar else (0, 0, 0)
         e = discord.Embed(
             description=f"# {user.mention}\n"
-            f"display name: {user.display_name}\n"
-            f"username: {user.name}\n"
-            f"id: {user.id}\n"
+            f"display name: `{user.display_name}`\n"
+            f"username: `{user.name}`\n"
+            f"id: `{user.id}`\n"
             f"created: <t:{round(user.created_at.timestamp())}:R> (<t:{round(user.created_at.timestamp())}:D>)\n"
             f"{avatar}"
             + (" · " if user.banner else "")
             + f"{banner}\n"
             + (
-                f"\nroles: {len(user.roles)}\njoined: <t:{round(user.joined_at.timestamp())}:R> (<t:{round(user.joined_at.timestamp())}:D>)"
+                f"\nroles: `{len(user.roles)}`\njoined: <t:{round(user.joined_at.timestamp())}:R> (<t:{round(user.joined_at.timestamp())}:D>)"
                 if isinstance(user, discord.Member)
                 else ""
-            )
+            ),
+            color=discord.Color.from_rgb(*col),
         )
 
         e.set_thumbnail(url=user.avatar.url if user.avatar else None)
@@ -77,7 +89,7 @@ class info(commands.Cog):
 
         e = discord.Embed(
             title=f"",
-            description=f"# about {guild.name}\n"
+            description=f"# {guild.name}\n"
             f"id: {guild.id}\n"
             f"owner: {guild.owner.mention}\n"
             f"roles: {len(roles)}\n"
@@ -92,7 +104,7 @@ class info(commands.Cog):
             f"total: {len(members)}\n"
             f"bots: {len(bots)}\n"
             f"users: {len(users)}",
-            color=Color.white,
+            color=discord.Color.from_rgb(*await avg_color(guild.icon.url) if guild.icon else (0, 0, 0))
         )
         e.set_thumbnail(url=guild.icon.url)
         await ctx.reply(embed=e)

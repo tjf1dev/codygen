@@ -70,9 +70,10 @@ class fun(commands.Cog):
                 if iteration >= 5:
                     word_found = True
                 word = random.choice(words)
-                entry: list | dict = await request(
+                req: aiohttp.ClientResponse = await request(
                     f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
                 )
+                entry: list | dict = await req.json()
                 if isinstance(entry, dict):
                     if (
                         entry.get("title", None).strip().lower()

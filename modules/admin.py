@@ -70,10 +70,10 @@ class admin(commands.Cog):
         name="restart", description="fully restarts every instance of the bot"
     )
     async def restart(self, ctx: commands.Context):
-        await ctx.message.add_reaction("🔄")
+        await ctx.message.add_reaction("➡️")
 
         async def check(reaction, user):
-            return user == ctx.author and str(reaction.emoji) == "🔄"
+            return user == ctx.author and str(reaction.emoji) == "➡️"
 
         try:
             reaction, user = await self.bot.wait_for(

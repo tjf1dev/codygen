@@ -532,29 +532,30 @@ client.start_time = time.time()
 
 @client.event
 async def on_ready():
+    logger.info("starting codygen")
     global start_time
     if getattr(client, "already_ready", False):
         return
     client.already_ready = True
     client.start_time = time.time()
-    logger.info("loading cogs..")
+    logger.info("loading modules..")
     await client.load_extension("jishaku")  # jsk #* pip install jishaku
     config = get_global_config()
     blacklist = config["cogs"]["blacklist"]
-    for filename in os.listdir("cogs"):
+    for filename in os.listdir("modules"):
         if filename.endswith(".py"):
             cog_name = filename[:-3]
             if cog_name in loaded_cogs:
-                logger.warning(f"Skipping duplicate load of {cog_name}")
+                logger.warning(f"skipping duplicate load of {cog_name}")
                 continue
             elif cog_name in blacklist:
-                logger.warning(f"Skipping blacklisted cog {cog_name}")
+                logger.warning(f"skipping blacklisted module {cog_name}")
                 continue
             loaded_cogs.add(cog_name)
             try:
-                await client.load_extension(f"cogs.{cog_name}")
+                await client.load_extension(f"modules.{cog_name}")
             except asyncio.TimeoutError:
-                logger.error(f"Timeout while loading {cog_name}")
+                logger.error(f"timeout while loading {cog_name}")
             logger.ok(f"loaded {cog_name}")
     logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
     admin_cog = client.get_cog("admin")
