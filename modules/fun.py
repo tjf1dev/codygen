@@ -26,7 +26,9 @@ class fun(commands.Cog):
         user1: discord.User = None,
         user2: discord.User = None,
     ):
-        if user2 is None:
+        if user1 is None:
+            print("Must have first user specified!")
+        elif user2 is None:
             user2 = ctx.author
         name1 = user1.name
         name2 = user2.name
