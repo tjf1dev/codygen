@@ -1,4 +1,7 @@
-from main import *
+import discord
+from discord.ext import commands
+from discord import app_commands
+from main import Color, custom_api_request
 from dateutil import parser
 
 

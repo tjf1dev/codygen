@@ -1,5 +1,6 @@
-from main import *
-import discord.ext.commands
+import discord
+from discord.ext import commands
+from main import logger, set_guild_config_key, get_guild_config
 
 
 class uotm(commands.Cog):
@@ -32,7 +33,7 @@ class uotm(commands.Cog):
             config["stats"]["uotm"]["users"].get(f"{ctx.author.id}", {"vote": None})[
                 "vote"
             ]
-            != None
+            is not None
         ):
             await ctx.send("you have already voted!", ephemeral=True)
             return
@@ -46,7 +47,7 @@ class uotm(commands.Cog):
             if c["id"] == user.id:
                 c["votes"] += 1
                 await ctx.send(f"you have voted for {user.name}!", ephemeral=True)
-        await set_guild_config_key(ctx.guild.id, f"stats.uotm.candidates", candidates)
+        await set_guild_config_key(ctx.guild.id, "stats.uotm.candidates", candidates)
         await set_guild_config_key(
             ctx.guild.id, f"stats.uotm.users.{ctx.author.id}.vote", user.id
         )
@@ -165,7 +166,7 @@ class uotm(commands.Cog):
 
         total_votes = sum(vote_count.values())
         results_embed = discord.Embed(
-            title=f"UOTM results",
+            title="UOTM results",
             description="remember: you can use use `/uotm apply` to apply for a candidate!\ncurrent standings:",
             color=0x00FF00,
         )

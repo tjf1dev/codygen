@@ -1,4 +1,7 @@
-from main import *
+import discord
+from discord.ext import commands
+from discord import app_commands
+from main import logger, Color, verify
 
 
 class moderation(commands.Cog):
@@ -21,7 +24,7 @@ class moderation(commands.Cog):
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @moderation.command(name="viewbanned", description="View banned people.")
     async def viewbanned(self, ctx: commands.Context):
-        if ctx.author.guild_permissions.ban_members and ctx.author != None:
+        if ctx.author.guild_permissions.ban_members and ctx.author is not None:
             bans = [entry async for entry in ctx.guild.bans()]
             if len(bans) == 1:
                 msg = f"is {len(bans)} person"

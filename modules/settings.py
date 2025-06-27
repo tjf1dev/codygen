@@ -1,9 +1,10 @@
-from main import *
-import json
-import os
-import discord
 from discord.ext import commands
+from discord import app_commands
+import json
+import discord
+from main import Color, get_prefix, set_guild_config_key, get_guild_config, setup_guild, logger
 
+# enabling this allows using a prefixed command for /settings init
 no_app_force = False
 
 

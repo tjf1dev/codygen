@@ -1,4 +1,11 @@
-from main import *
+import discord
+import os
+import json
+import asyncio
+import aiofiles
+import time
+from discord.ext import commands
+from main import Color, logger, get_global_config, GLOBAL_REGEN_PASSWORD, get_config_defaults, make_guild_config, version
 import subprocess
 
 
@@ -119,7 +126,7 @@ class admin(commands.Cog):
         try:
             with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
                 data = json.load(f)
-                tickets = data["stats"]["ticket"]
+                # tickets = data["stats"]["ticket"]
                 data["stats"]["ticket"] = []
 
             with open(f"data/guilds/{ctx.guild.id}.json", "w") as f:

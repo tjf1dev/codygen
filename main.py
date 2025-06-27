@@ -5,19 +5,25 @@
 # tjf1: https://github.com/tjf1dev
 #
 # feel free to read this terrible code, i am not responsible for any brain damage caused by this.
-# importing the modules
-import discord, os, aiofiles, dotenv, random, io, json, time, psutil, datetime, logging, requests, asyncio, hashlib, base64, sys, quart, aiohttp
+
+import discord
+import os
+import aiofiles
+import dotenv
+import json
+import time
+import asyncio
+import base64
+import sys
+import aiohttp
 from discord.ext import commands
 from discord import app_commands
-from typing import AsyncGenerator, Union, Optional, Dict, Any
+from typing import AsyncGenerator, Optional, Dict, Any
 from colorama import Fore
 from ext.colors import Color
 from ext.logger import logger
 from ext.web import app
-import ext.errors
 
-io  # its being used in different cogs, im marking it here so vscode wont annoy me with 'unused'
-requests  # same as io
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
 
@@ -37,7 +43,7 @@ def get_global_config() -> dict:
 
 # pre-init functions
 def get_config_defaults() -> dict:
-    with open(f"config.json", "r") as f:
+    with open("config.json", "r") as f:
         return json.load(f)["template"]["guild"]
 
 
@@ -92,10 +98,10 @@ async def get_prefix(bot: commands.Bot = None, message: discord.Message = None) 
     try:
         conf = await get_guild_config(message.guild.id)
         prefix = conf["prefix"]["prefix"]
-        if message == None or prefix == None:
+        if message is None or prefix is None:
             return commands.when_mentioned_or(default_prefix)
         return prefix
-    except Exception as e:
+    except Exception:
         return default_prefix
 
 
@@ -134,8 +140,8 @@ def get_required_env() -> list:
     r = []
     with open(".env.template", "r") as f:
         lines = f.readlines()
-        for l in lines:
-            r.append(l.split("=")[0])
+        for line in lines:
+            r.append(line.split("=")[0])
     return r
 
 
@@ -156,12 +162,12 @@ def ensure_env():
 
     if missing:
         logger.error(
-            f"Missing environment variables: "
+            "Missing environment variables: "
             + ", ".join(missing)
             + "\nI have generated a `.env.template` in this folder.\n"
             + "\n By default, you may not see files that have a dot in them, so enable listing of hidden files to see it.\n"
-            + f"→ Copy it to `.env` and fill in the real values before restarting.\n"
-            + f"For more details on how to configure the bot, please refer to the official documentation:\n"
+            + "→ Copy it to `.env` and fill in the real values before restarting.\n"
+            + "For more details on how to configure the bot, please refer to the official documentation:\n"
             + f"https://github.com/tjf1dev/codygen#self-hosting.{Fore.RESET}"
         )
         sys.exit(1)
@@ -171,8 +177,8 @@ def ensure_env():
 try:
     with open("config.json", "r") as f:
         data = json.load(f)
-except Exception as e:
-    logger.error(f"could not find config, generating new configuration")
+except Exception:
+    logger.error("could not find config, generating new configuration")
     pass
 # command configs
 data = get_global_config()
@@ -181,7 +187,7 @@ version = data["version"]
 # bot definitions
 intents = discord.Intents.all()
 
-client = commands.AutoShardedBot(
+client = commands.Bot(
     command_prefix=get_prefix,
     intents=intents,
     status=discord.Status.idle,
@@ -236,13 +242,13 @@ class HelpSelect(discord.ui.Select):
         if self.values[0] == "No Modules Loaded":
             fail = discord.Embed(
                 title="failed to load the list of modules",
-                description=f"please report this issue.",
+                description="please report this issue.",
                 color=Color.negative,
             )
             await interaction.response.edit_message(embed=fail)
             return
         cog = client.get_cog(self.values[0])
-        if cog == None:
+        if cog is None:
             fail = discord.Embed(
                 title="failed to load :broken_heart:",
                 description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
@@ -306,7 +312,7 @@ class SupportModal(discord.ui.Modal, title="Reply to Support Ticket"):
     response = discord.ui.TextInput(label="Response", style=discord.TextStyle.paragraph)
 
     async def on_submit(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
+        # user_id = interaction.user.id
         original_user_id = interaction.message.content.splitlines()[0]
         ticket_id = interaction.message.content.splitlines()[1]
         user = await client.fetch_user(int(original_user_id))
@@ -376,8 +382,8 @@ async def verify_alt(guild_id, interaction) -> bool:
     verify() but instead of a decorator its a function
     """
     prefix_enabled = await get_guild_config(guild_id)["prefix"]["prefix_enabled"]
-    if prefix_enabled == None:
-        prefix_enabled == False
+    if not prefix_enabled:
+        prefix_enabled = False
     if interaction is not None:
         return True
     return prefix_enabled
@@ -438,7 +444,7 @@ async def setup_guild(
         )
     else:
         e = discord.Embed(
-            title=f"hello! welcome (back) to codygen!",
+            title="hello! welcome (back) to codygen!",
             description="## Support\n> Please join our [support server](https://discord.gg/WyxN6gsQRH).\n## Issues and bugs\n> Report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our GitHub repository.\n-# initializer v2",
             color=Color.white,
         )

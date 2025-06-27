@@ -1,9 +1,16 @@
-from main import *
-from discord.ext import commands, tasks
-import asyncio, re
-from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
+import re
+import time
+import psutil
+import sys
+import os
+import aiohttp
+import discord
 import ext.errors
+from discord.ext import commands
+from discord import app_commands
+from main import logger, Color, verify, get_global_config, version
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 def parse_msglink(link: str):
@@ -65,14 +72,14 @@ class HelpSelect(discord.ui.Select):
         if self.values[0] == "No Modules Loaded":
             fail = discord.Embed(
                 title="failed to load the list of modules",
-                description=f"please report this issue.",
+                description="please report this issue.",
                 color=Color.negative,
             )
             await interaction.response.edit_message(embed=fail)
             return
         cog = self.bot.get_cog(self.values[0])
 
-        if cog == None:
+        if cog is None:
             fail = discord.Embed(
                 title="failed to load :broken_heart:",
                 description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
@@ -181,7 +188,7 @@ class utility(commands.Cog):
         name="post",
         description="status updates for various things, post update. timestamps are in CEST",
     )
-    async def post(
+    async def status_post(
         self,
         ctx: commands.Context,
         initial: str,
@@ -211,7 +218,7 @@ class utility(commands.Cog):
 
     @commands.has_permissions(manage_messages=True)
     @status.command(name="add", description="add an event to a status.")
-    async def add(
+    async def status_add(
         self, ctx: commands.Context, link: str, content: str, ping: bool = False
     ):
         parsed = parse_msglink(link)
@@ -264,7 +271,7 @@ class utility(commands.Cog):
 
     @commands.has_permissions(manage_messages=True)
     @status.command(name="close", description="resolve status event.")
-    async def add(
+    async def status_close(
         self,
         ctx: commands.Context,
         link: str,
@@ -327,7 +334,7 @@ class utility(commands.Cog):
         client = self.bot
         e = discord.Embed(
             title=f"codygen v{version}",
-            description=f"### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for command list +more",
+            description="### hii :3 bot made by `tjf1`\nuse </help:1338168344506925108> for command list +more",
             color=Color.accent,
         )
         e.set_thumbnail(url=self.bot.user.avatar.url)

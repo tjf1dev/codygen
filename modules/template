@@ -1,5 +1,6 @@
-from main import *
-
+from discord.ext import commands
+from discord import app_commands
+# from main import logger, Color, verify
 class NAME(commands.Cog):
     def __init__(self, bot):
         self.bot = bot

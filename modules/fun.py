@@ -1,6 +1,12 @@
-from main import *
-import discord, random, json, csv
-import os
+from main import verify, request, get_global_config, get_guild_config, words
+import discord
+import requests
+import aiohttp
+import random
+import csv
+from discord.ext import commands
+from ext.colors import Color
+from ext.logger import logger
 
 
 class fun(commands.Cog):
@@ -28,10 +34,10 @@ class fun(commands.Cog):
     ):
         if user2 is None:
             user2 = ctx.author
-        name1 = user1.name
-        name2 = user2.name
+        # name1 = user1.name
+        # name2 = user2.name
         ship = str(random.randint(0, 100))
-        exceptions_100 = [[1201995223996321886, 1191871707577864203]]
+        exceptions_100 = [[1201995223996321886, 1191871707577864203], [978596696156147754, 1201995223996321886]]
 
         def is_exception(id):
             for e in exceptions_100:
@@ -43,7 +49,7 @@ class fun(commands.Cog):
         if is_exception(user1.id) and is_exception(user2.id):
             ship = 100
         embed = discord.Embed(
-            title=f"ship",
+            title="ship",
             description=f"ship between {user1.mention} and {user2.mention} is {ship}%",
             color=Color.accent_og,
         )
@@ -129,7 +135,7 @@ class fun(commands.Cog):
                 e = discord.Embed(description=desc)
                 embeds.append(e)
         if not entry:
-            e = discord.Embed(description=f"couldn't find a definition for this word.")
+            e = discord.Embed(description="couldn't find a definition for this word.")
             embeds.append(e)
         await ctx.reply(embeds=embeds, ephemeral=False if found else True)
 
@@ -157,7 +163,7 @@ class fun(commands.Cog):
             await ctx.reply(f"{user.mention} is **wamz** woke")
             return
         if user.bot:
-            await ctx.reply(f"bots cant be woke :broken_heart:")
+            await ctx.reply("bots cant be woke :broken_heart:")
             return
         else:
             await ctx.reply(

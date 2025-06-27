@@ -1,10 +1,16 @@
 import base64
 import hmac
 import aiohttp
+import hashlib
 from PIL import Image
 from io import BytesIO
-import asyncio
-from main import *
+import discord
+import os
+import requests
+import json
+from discord.ext import commands
+from discord import app_commands
+from main import Color, logger
 
 
 async def get_average_color(url):
@@ -58,13 +64,6 @@ def generate_state_hash(user_id: int, secret: str) -> str:
     secret_bytes = secret.encode()
     digest = hmac.new(secret_bytes, user_bytes, hashlib.sha256).digest()
     return base64.urlsafe_b64encode(digest)[:12].decode()
-
-
-import discord
-import json
-import requests
-import os
-from discord.ext import commands
 
 
 class fm(commands.Cog):

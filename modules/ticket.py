@@ -1,5 +1,9 @@
-from main import *
-
+import discord
+from discord.ext import commands
+import random
+import json
+import time
+from main import logger, verify, get_guild_config
 
 class ticket(commands.Cog):
     def __init__(self, bot):

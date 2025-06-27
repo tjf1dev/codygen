@@ -1,5 +1,11 @@
-from main import *
+import discord
+import os
+import io
+import time
+from discord.ext import commands
+from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
+from main import Color, set_guild_config_key, get_guild_config, logger, verify
 import traceback
 
 
@@ -104,7 +110,7 @@ class ConfirmBoost(discord.ui.View):
         try:
             timeout = discord.Embed(title="timed out.", color=Color.gray)
             await self.message.edit(view=self, embed=timeout)
-        except:
+        except Exception:
             pass
 
     async def replace_button(self, interaction: discord.Interaction):
@@ -115,7 +121,7 @@ class ConfirmBoost(discord.ui.View):
         )
         global_success_delete = discord.Embed(
             title="success",
-            description=f"### all global boosts have been disabled",
+            description="### all global boosts have been disabled",
             color=Color.green,
         )
         global_success_replace = discord.Embed(
@@ -164,7 +170,7 @@ class ConfirmBoost(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=None)
 
     async def abort_button(self, interaction: discord.Interaction):
-        await interaction.response.send_message(f"action cancelled.", ephemeral=True)
+        await interaction.response.send_message("action cancelled.", ephemeral=True)
 async def send_levelup(user: discord.Member, guild: discord.Guild, xp, new_xp):
     """
     Sends a levelup message to the channel configured in the guild config.
@@ -239,10 +245,10 @@ async def xp(user: discord.Member, guild: discord.Guild):
             int(user_xp + xp_with_boost),
         )
 
-        old_level = xp_to_level(
-            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
-            - int(xp_with_boost)
-        )
+        # old_level = xp_to_level(
+        #     guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
+        #     - int(xp_with_boost)
+        # )
         new_level = xp_to_level(
             guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
         )
@@ -320,12 +326,12 @@ class level(commands.Cog):
         # logger.debug("all boosts gathered")
 
         highest_boost_value = 0
-        highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
+        # highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
 
         global_boost = boosts.get("global", {"percentage": 0, "expires": 0})
         if global_boost["expires"] > time.time() or global_boost["expires"] == -1:
             highest_boost_value = global_boost["percentage"]
-            highest_boost_type = 0
+            # highest_boost_type = 0
         else:
             logger.warning(
                 f"global boost expired: {global_boost['expires']} < {time.time()}"
@@ -342,7 +348,7 @@ class level(commands.Cog):
                 and role_boost["percentage"] > highest_boost_value
             ):
                 highest_boost_value = role_boost["percentage"]
-                highest_boost_type = 1
+                # highest_boost_type = 1
 
         user_boost = user_boosts.get(
             str(ctx.author.id), {"expires": 0, "percentage": 0}
@@ -352,7 +358,7 @@ class level(commands.Cog):
             and user_boost["percentage"] > highest_boost_value
         ):
             highest_boost_value = user_boost["percentage"]
-            highest_boost_type = 2
+            # highest_boost_type = 2
 
         boost_data = [
             ("🌐 global", global_boost),
@@ -442,16 +448,16 @@ class level(commands.Cog):
             color=Color.lgreen,
             description=f"### almost done!\nnow please confirm to apply the {percentage}% global boost.\nwill expire in {timestamp(expires, 'R')}",
         )
-        neutral_infinite_already_exists = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        )
-        neutral_infinite_confirm = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill not expire.",
-        )
+        # neutral_infinite_already_exists = discord.Embed(
+        #     title="",
+        #     color=Color.lyellow,
+        #     description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
+        # )
+        # neutral_infinite_confirm = discord.Embed(
+        #     title="",
+        #     color=Color.lgreen,
+        #     description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill not expire.",
+        # )
 
         embeds = []
         fail = False
@@ -532,20 +538,20 @@ class level(commands.Cog):
             color=Color.lgreen,
             description=f"### success\n{user.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",
         )
-        neutral_infinite_already_exists = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### already exists\nOLD: **{user_boost["percentage"]}%** (until {timestamp(user_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        )
-        neutral_infinite_confirm = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {user_boost["percentage"]}% global boost.\nwill not expire.",
-        )
+        # neutral_infinite_already_exists = discord.Embed(
+        #     title="",
+        #     color=Color.lyellow,
+        #     description=f"### already exists\nOLD: **{user_boost["percentage"]}%** (until {timestamp(user_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
+        # )
+        # neutral_infinite_confirm = discord.Embed(
+        #     title="",
+        #     color=Color.lgreen,
+        #     description=f"### almost done!\nnow please confirm to apply the {user_boost["percentage"]}% global boost.\nwill not expire.",
+        # )
 
         embeds = []
         fail = False
-        confirm = 1 if exists else 0
+        # confirm = 1 if exists else 0
         if percentage == 0:
             await ctx.reply(embed=neutral_disable)
             return
@@ -627,20 +633,20 @@ class level(commands.Cog):
             color=Color.lgreen,
             description=f"### success\n{role.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",
         )
-        neutral_infinite_already_exists = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### already exists\nOLD: **{role_boost["percentage"]}%** (until {timestamp(role_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        )
-        neutral_infinite_confirm = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {role_boost["percentage"]}% global boost.\nwill not expire.",
-        )
+        # neutral_infinite_already_exists = discord.Embed(
+        #     title="",
+        #     color=Color.lyellow,
+        #     description=f"### already exists\nOLD: **{role_boost["percentage"]}%** (until {timestamp(role_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
+        # )
+        # neutral_infinite_confirm = discord.Embed(
+        #     title="",
+        #     color=Color.lgreen,
+        #     description=f"### almost done!\nnow please confirm to apply the {role_boost["percentage"]}% global boost.\nwill not expire.",
+        # )
 
         embeds = []
         fail = False
-        confirm = 1 if exists else 0
+        # confirm = 1 if exists else 0
         if percentage == 0:
             await ctx.reply(embed=neutral_disable)
             return
@@ -671,7 +677,7 @@ class level(commands.Cog):
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @level.command(name="get", description="Check your current level.")
     async def level_get(self, ctx: commands.Context, user: discord.Member = None):
-        if user == None:
+        if user is None:
             user = ctx.author
         try:
             data = await get_guild_config(ctx.guild.id)
@@ -788,7 +794,7 @@ class level(commands.Cog):
             img = Image.new("RGB", (450, 512), color=(0, 0, 0))
             d = ImageDraw.Draw(img)
 
-            font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 48)
+            # font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 48)
             font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
             font_light = ImageFont.truetype("assets/ClashDisplay-Extralight.ttf", 22)
 
@@ -866,7 +872,7 @@ class level(commands.Cog):
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
-        if user == None:
+        if user is None:
             user = ctx.author
         await set_guild_config_key(
             ctx.guild.id, f"stats.level.users.{user.id}.xp", xp
@@ -892,7 +898,7 @@ class level(commands.Cog):
             ephemeral=False,
         )
 
-        data_path = f"data/guilds/{ctx.guild.id}.json"
+        # data_path = f"data/guilds/{ctx.guild.id}.json"
         try:
             data = await get_guild_config(ctx.guild.id)
 

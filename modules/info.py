@@ -1,5 +1,7 @@
-from main import *
-import PIL
+import discord
+import aiohttp
+from discord.ext import commands
+from discord import app_commands
 from PIL import Image
 from io import BytesIO
 async def avg_color(url):
@@ -88,7 +90,6 @@ class info(commands.Cog):
                     other_channels.append(c)
 
         e = discord.Embed(
-            title=f"",
             description=f"# {guild.name}\n"
             f"id: {guild.id}\n"
             f"owner: {guild.owner.mention}\n"
