@@ -33,7 +33,7 @@
     "template": {
         
         "guild": {
-            "config_ver":11,
+            "config_ver":12,
             "stats":{
                 "level":{},
                 "ticket":[],
@@ -73,6 +73,11 @@
                 "wokemeter":{
                     "woke_min": "0",
                     "woke_max": "100"
+                },
+                "ship":{
+                    "exceptions":{
+                        "100":[]
+                    }
                 }
             },
             "prefix": {

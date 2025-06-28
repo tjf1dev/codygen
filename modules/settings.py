@@ -2,7 +2,14 @@ from discord.ext import commands
 from discord import app_commands
 import json
 import discord
-from main import Color, get_prefix, set_guild_config_key, get_guild_config, setup_guild, logger
+from main import (
+    Color,
+    get_prefix,
+    set_guild_config_key,
+    get_guild_config,
+    setup_guild,
+    logger,
+)
 
 # enabling this allows using a prefixed command for /settings init
 no_app_force = False
@@ -47,7 +54,7 @@ class InitHomeView(discord.ui.View):
             await interaction.followup.send(embeds=list(embed), ephemeral=True)
 
 
-class Settings(commands.Cog):
+class settings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Settings commands to manage your bot instance."
@@ -141,4 +148,4 @@ class Settings(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Settings(bot))
+    await bot.add_cog(settings(bot))

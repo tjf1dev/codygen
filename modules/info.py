@@ -4,15 +4,19 @@ from discord.ext import commands
 from discord import app_commands
 from PIL import Image
 from io import BytesIO
+
+
 async def avg_color(url):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             response.raise_for_status()
             data = await response.read()
-    img = Image.open(BytesIO(data)).convert('RGB')
+    img = Image.open(BytesIO(data)).convert("RGB")
     img = img.resize((1, 1))
     average_color = img.getpixel((0, 0))
     return average_color
+
+
 class info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -105,7 +109,9 @@ class info(commands.Cog):
             f"total: {len(members)}\n"
             f"bots: {len(bots)}\n"
             f"users: {len(users)}",
-            color=discord.Color.from_rgb(*await avg_color(guild.icon.url) if guild.icon else (0, 0, 0))
+            color=discord.Color.from_rgb(
+                *await avg_color(guild.icon.url) if guild.icon else (0, 0, 0)
+            ),
         )
         e.set_thumbnail(url=guild.icon.url)
         await ctx.reply(embed=e)
