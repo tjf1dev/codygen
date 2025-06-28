@@ -1,5 +1,5 @@
 requests
-discord.py
+git+https://github.com/DA-344/d.py@feat/components-v2
 python-dotenv 
 quart
 aiofiles

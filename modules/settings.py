@@ -47,7 +47,7 @@ class InitHomeView(discord.ui.View):
             await interaction.followup.send(embeds=list(embed), ephemeral=True)
 
 
-class Settings(commands.Cog):
+class settings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Settings commands to manage your bot instance."
@@ -141,4 +141,4 @@ class Settings(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Settings(bot))
+    await bot.add_cog(settings(bot))

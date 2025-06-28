@@ -22,7 +22,8 @@ from typing import AsyncGenerator, Optional, Dict, Any
 from colorama import Fore
 from ext.colors import Color
 from ext.logger import logger
-from ext.web import app
+
+# from ext.web import app
 
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
@@ -105,6 +106,10 @@ async def get_prefix(bot: commands.Bot = None, message: discord.Message = None) 
         return default_prefix
 
 
+async def cleanup_cache():
+    pass
+
+
 async def custom_api_request(
     bot: commands.Bot,
     endpoint: str,
@@ -119,7 +124,7 @@ async def custom_api_request(
 
     async with aiohttp.ClientSession() as session:
         async with session.request(method.__name__, url, headers=headers) as response:
-            return await response.json()
+            return [response, await response.json()]
 
 
 async def request(
@@ -134,6 +139,20 @@ async def request(
     async with aiohttp.ClientSession() as session:
         async with session.request(method, url, headers=headers, **kwargs) as response:
             return response
+
+
+async def request_with_json(
+    url: str,
+    method: str = "GET",
+    headers: Optional[Dict[str, str]] = None,
+    json: Optional[Dict[str, str]] = None,
+    **kwargs: Any,
+) -> aiohttp.ClientResponse:
+    if headers is None:
+        headers = {}
+    async with aiohttp.ClientSession() as session:
+        async with session.request(method, url, headers=headers, **kwargs) as response:
+            return await response.json()
 
 
 def get_required_env() -> list:
@@ -390,6 +409,13 @@ async def verify_alt(guild_id, interaction) -> bool:
 
 
 @client.event
+async def on_command(ctx: commands.Context):
+    logger.info(
+        f"{ctx.command} has been used by {ctx.author.global_name} ({ctx.author.id})!"
+    )
+
+
+@client.event
 async def on_command_error(ctx: commands.Context, error):
     if isinstance(error, commands.CheckFailure):
         return
@@ -399,6 +425,26 @@ async def on_command_error(ctx: commands.Context, error):
             color=Color.negative,
         )
         await ctx.reply(embed=e, ephemeral=True)
+    if isinstance(error, KeyError):
+        e = (
+            discord.Embed(
+                title="this server's configuration has malfunctioned.",
+                description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen) and the administrators of this server.",
+                color=Color.lblue,
+            )
+            .add_field(name="error", value=f"```{error}```")
+            .add_field(
+                name="command",
+                value=f"```{ctx.command.full_parent_name}```",
+                inline=False,
+            )
+            .add_field(name="version", value=f"```{version}```", inline=True)
+        )
+        await ctx.send(embed=e, ephemeral=False)  # Handle other errors normally
+        logger.error(
+            f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__}: {error}"
+        )
+        raise commands.errors.CommandError(str(error))
     elif isinstance(error, commands.CommandNotFound):
         return
     else:
@@ -625,14 +671,16 @@ async def on_ready():
 #     await client.process_commands(message)
 
 
-async def run_quart():
-    await app.run_task(host="0.0.0.0", port=4887)
+# async def run_quart():
+#     pass
+#     # await app.run_task(host="0.0.0.0", port=4888) #todo allow changing port
 
 
-async def main():
-    await asyncio.gather(run_quart(), client.start(TOKEN))
+# async def main():
+#     await asyncio.gather(run_quart(), )
 
 
 if __name__ == "__main__":
     ensure_env()
-    asyncio.run(main())
+    #  asyncio.run(main())
+    client.run(TOKEN)

@@ -1,4 +1,11 @@
-from main import verify, request, get_global_config, get_guild_config, words
+from main import (
+    verify,
+    request,
+    request_with_json,
+    get_global_config,
+    get_guild_config,
+    words,
+)
 import discord
 import requests
 import aiohttp
@@ -37,7 +44,10 @@ class fun(commands.Cog):
         # name1 = user1.name
         # name2 = user2.name
         ship = str(random.randint(0, 100))
-        exceptions_100 = [[1201995223996321886, 1191871707577864203], [978596696156147754, 1201995223996321886]]
+        exceptions_100 = [
+            [1201995223996321886, 1191871707577864203],
+            [978596696156147754, 1201995223996321886],
+        ]
 
         def is_exception(id):
             for e in exceptions_100:
@@ -62,10 +72,12 @@ class fun(commands.Cog):
 
     @verify()
     @fun_group.command(
-        name="randomword", description="get random word from english dictionary"
+        name="randomword",
+        description="get random word from the english dictionary and it's definition",
     )
     async def randomword(self, ctx: commands.Context):
-        await ctx.interaction.response.defer()
+        if ctx.interaction:
+            await ctx.interaction.response.defer()
         with open("assets/randomword.txt", "r") as file:
             text = file.read()
             words = list(map(str, text.split()))
@@ -76,10 +88,9 @@ class fun(commands.Cog):
                 if iteration >= 5:
                     word_found = True
                 word = random.choice(words)
-                req: aiohttp.ClientResponse = await request(
+                entry: list | dict = await request_with_json(
                     f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
                 )
-                entry: list | dict = await req.json()
                 if isinstance(entry, dict):
                     if (
                         entry.get("title", None).strip().lower()
@@ -106,8 +117,7 @@ class fun(commands.Cog):
 
     @fun_group.command(name="word", description="get definition of an english word")
     async def word(self, ctx: commands.Context, *, word: str):
-        logger.debug(f"getting the word: {word}")
-        entry: list | dict = await request(
+        entry: list | dict = await request_with_json(
             f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
         )
         found = False
@@ -118,7 +128,6 @@ class fun(commands.Cog):
         if entry:
             found = True
             meanings = entry[0].get("meanings", [{}])
-            logger.debug(f"entry: {entry}")
             e1 = discord.Embed(
                 description=f"# {word}\nfound {len(meanings)} meanings for this word."
             )
@@ -141,7 +150,7 @@ class fun(commands.Cog):
 
     @verify()
     @fun_group.command(name="cute", description="cute command")
-    async def cute(self, ctx: commands.Context, user: discord.User = None):
+    async def cute(configself, ctx: commands.Context, user: discord.User = None):
         if user:
             await ctx.reply(f"{user.mention} is cute and silly :3")
         else:
@@ -150,7 +159,8 @@ class fun(commands.Cog):
     @verify()
     @fun_group.command(name="wokemeter", description="see how WOKE someone is!")
     async def wokemeter(self, ctx: commands.Context, user: discord.User = None):
-        woke = await get_guild_config(ctx.guild.id)["commands"]["wokemeter"]
+        config = await get_guild_config(ctx.guild.id)
+        woke = config["commands"]["wokemeter"]
         woke_min = woke["woke_min"]
         woke_max = woke["woke_max"]
         exceptions = woke["exceptions"]

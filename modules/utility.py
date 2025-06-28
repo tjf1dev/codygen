@@ -11,6 +11,24 @@ from discord import app_commands
 from main import logger, Color, verify, get_global_config, version
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from PIL import Image
+from io import BytesIO
+from ext.ui_base import Message
+import ext.views
+
+
+async def image_url_to_gif(url: str) -> str:
+    os.makedirs("cache/converted", exist_ok=True)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                raise Exception(f"Failed to download image: {resp.status}")
+            data = await resp.read()
+    img = Image.open(BytesIO(data)).convert("RGBA")
+    filename = f"{time.time()}.gif"
+    output_path = os.path.join("cache", filename)
+    img.save(output_path, format="GIF")
+    return output_path
 
 
 def parse_msglink(link: str):
@@ -22,6 +40,70 @@ def parse_msglink(link: str):
         guild_id, channel_id, message_id = map(int, match.groups())
         return guild_id, channel_id, message_id
     return None
+
+
+class MessageLayout(discord.ui.LayoutView):
+    def __init__(self, message: str, **kwargs):
+        super().__init__()
+
+        accent_color = kwargs.get("accent_color", None)
+        container = discord.ui.Container(accent_color=accent_color)
+        container.add_item(discord.ui.TextDisplay(message))
+
+        self.add_item(container)
+
+
+class FailedToConvertLayout(MessageLayout):
+    def __init__(self, **kwargs):
+        super().__init__(
+            "## No attachments found in this message.\nPlease make sure you select a message with an image to convert it into a GIF.",
+            **kwargs,
+        )
+
+
+class GIFMediaGallery(discord.ui.MediaGallery):
+    def __init__(self, attachments: list[discord.File]):
+        super().__init__()
+
+        for file in attachments:
+            self.add_item(media=f"attachment://{file.filename}")
+
+
+class GIFMediaLayout(discord.ui.LayoutView):
+    def __init__(self, paths: list[discord.File], **kwargs):
+        super().__init__()
+
+        accent_color = kwargs.get("accent_color", None)
+        container = discord.ui.Container(accent_color=accent_color)
+        # container.add_item(discord.ui.TextDisplay(message))
+        container.add_item(GIFMediaGallery(paths))
+
+        self.add_item(container)
+
+
+@app_commands.context_menu(name="Convert to GIF")
+async def convert_to_gif(interaction: discord.Interaction, message: discord.Message):
+    attachments = message.attachments
+    await interaction.response.defer(ephemeral=True)
+
+    if not attachments:
+        await interaction.followup.send(view=FailedToConvertLayout(), ephemeral=True)
+        return
+
+    paths = []
+    files = []
+    for attachment in attachments:
+        path = await image_url_to_gif(attachment.url)
+        paths.append(path)
+        files.append(discord.File(path))
+
+    view = GIFMediaLayout(paths=files)
+    await interaction.followup.send(files=files, view=view, ephemeral=True)
+    for file in files:
+        try:
+            os.remove(file.fp.name)
+        except Exception as e:
+            logger.warning(f"Failed to delete {file.fp.name}: {e}")
 
 
 class HelpSelect(discord.ui.Select):
@@ -51,6 +133,7 @@ class HelpSelect(discord.ui.Select):
         super().__init__(
             placeholder="Select a cog", max_values=1, min_values=1, options=options
         )
+
     # hey, for self-hosted users: #! please don’t remove this command
     # i get it, you want your own bot, but at least give me some credit for this
     # if you really want your own bot, make one yourself
@@ -82,7 +165,7 @@ class HelpSelect(discord.ui.Select):
         if cog is None:
             fail = discord.Embed(
                 title="failed to load :broken_heart:",
-                description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
+                description=f"module {self.values[0]} (modules.{self.values[0]}) failed to load.",
                 color=Color.negative,
             )
             await interaction.response.edit_message(embed=fail)
@@ -131,6 +214,7 @@ class utility(commands.Cog):
     def __init__(self, bot):
         self.bot: commands.Bot = bot
         self.description = "tools that can be helpful sometimes!"
+
     # deltarune,, nevr heard of this game smh
     # @tasks.loop(hours=24)
     # async def countdown_loop(self):
@@ -157,11 +241,13 @@ class utility(commands.Cog):
     #     seconds_until_midnight = (next_midnight - now).total_seconds()
     #     await asyncio.sleep(seconds_until_midnight)
 
-    @commands.Cog.listener()
-    async def on_ready(self):
+    # @commands.Cog.listener()
+    async def cog_load(self):
         # if not self.countdown_loop.is_running():
         #     self.countdown_loop.start()
-        logger.info(f"{self.__class__.__name__}: loaded.")
+        self.bot.tree.add_command(convert_to_gif)
+        logger.debug("added context menu to utility module")
+        # logger.info(f"{self.__class__.__name__}: loaded.")
 
     @commands.hybrid_group(
         name="utility", description="tools that can be helpful sometimes!"
@@ -397,19 +483,19 @@ class utility(commands.Cog):
 
     @verify()
     @commands.hybrid_command(
-        name="help", description="shows useful info about the bot."
+        name="help-legacy", description="shows useful info about the bot."
     )
-    async def help_command(self, ctx: commands.Context):
+    async def help_old(self, ctx: commands.Context):
         embed = discord.Embed(
             title="",
             description="# codygen\ncode: <https://github.com/tjf1dev/codygen>\nuse the menu's below to search for commands and their usages.",  # i can change it now
             color=Color.purple,
         )
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot), ephemeral=True)
+
     @verify()
     @commands.hybrid_command(
-        name="add",
-        description="shows useful info about the bot"
+        name="add", description="lets you add codygen to your server or profile"
     )
     async def add(self, ctx: commands.Context):
         bid = os.getenv("APP_ID")
@@ -418,14 +504,13 @@ class utility(commands.Cog):
         e = discord.Embed(
             description="# add codygen\n"
             f"## [server]({guild})\n"
-            "use the link above to invite codygen to your server. this is the regular way of adding bots\n"
+            "use the link above to invite codygen to your server.\n"
             f"## [user install]({user})\n"
-            "use this link to install codygen to your user. you will be able to use it's commands anywhere\n\n"
+            "use this link to install codygen to your profile. you will be able to use it's commands anywhere\n\n"
             f"-# [about codygen](https://github.com/tjf1dev/codygen)",
             color=Color.accent,
         )
         await ctx.reply(embed=e, ephemeral=False)
-
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -434,9 +519,7 @@ class utility(commands.Cog):
         description="view detailed information about codygen, including contributors, etc.",
     )
     async def about(self, ctx: commands.Context):
-        repo: str = get_global_config()["commands"].get("about", {"repo": ""})[
-            "repo"
-        ]
+        repo: str = get_global_config()["commands"].get("about", {"repo": ""})["repo"]
         if not len(repo.split("/")) == 2:
             raise ext.errors.MisconfigurationError(
                 f"commands > about > repo: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split("/")}"
@@ -467,20 +550,7 @@ class utility(commands.Cog):
         contributors = ""
         for c in data:
             contributors += f"[`{c["login"]}`](<{c["html_url"]}>): {c["contributions"]} contributions\n"
-
-        e = discord.Embed(
-            description=f"""
-            # codygen\n
-            ### made by [`tjf1`](<https://github.com/tjf1dev>)\n
-            ## contributors\n{contributors}
-            ## support\n
-            it takes a long time making a bot, any support would be appreciated! :3\n
-            ### [`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n\n
-            thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3
-            """,
-            color=Color.accent,
-        )
-        await ctx.reply(embed=e)
+        await ctx.reply(view=ext.views.AboutLayout(self.bot, contributors))
 
     # now some exclusives i need for my server
     # guild id will be hardcoded
