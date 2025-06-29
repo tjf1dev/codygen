@@ -221,6 +221,7 @@ tree = client.tree
 # client custom vars
 # these get passed to cogs
 client.color = Color
+client.version = version
 # load env
 dotenv.load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")  # bot token
