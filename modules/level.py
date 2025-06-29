@@ -9,6 +9,7 @@ from main import Color, set_guild_config_key, get_guild_config, logger, verify
 import traceback
 from ext.utils import xp_to_level, _old_xp_to_level
 from ext.views import LevelupLayout
+import aiosqlite
 
 
 def split_embed_description(lines, max_length=4096) -> list:
@@ -191,11 +192,12 @@ async def send_levelup(
     await channel.send(view=view)
 
 
-async def xp(user: discord.Member, guild: discord.Guild):
+async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connection):
     """
     Main handler for xp gain
     This takes boosts to account, levelup message is sent seperately
     """
+    cur = await con.cursor()
     if user.bot:
         return
     per_message_default = 10
@@ -284,10 +286,11 @@ class level(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Track and reward users for activity"
+        self.db: aiosqlite.Connection = bot.db
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
-        await xp(message.author, message.guild)
+        await xp(message.author, message.guild, self.db)
 
     # await channel.send(
     #     f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
@@ -295,9 +298,10 @@ class level(commands.Cog):
     #     if highest_boost != 0
     #     else ""
     # )
-    @commands.Cog.listener()
-    async def on_ready(self):
-        logger.info(f"{self.__class__.__name__}: loaded.")
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+        if self.db.is_alive():
+            logger.debug("connected to database")
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)

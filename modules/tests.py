@@ -2,6 +2,8 @@ from discord.ext import commands
 from discord import Interaction
 from main import version
 import random
+import aiosqlite
+from db import get_database_latency
 
 # from discord import app_commands
 import discord
@@ -12,6 +14,7 @@ class tests(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = ""
+        self.db: aiosqlite.Connection = bot.db
 
     class TestButton(discord.ui.Button):
         async def callback(self, interaction: Interaction):
@@ -92,6 +95,18 @@ class tests(commands.Cog):
         await ctx.send(
             f"-# old_xp = {old_xp}, xp = {xp}, place in leaderboard = {place_in_leaderboard}"
         )
+
+    @commands.is_owner()
+    @commands.command(name="db", description="get database connection")
+    async def db(self, ctx: commands.Context, *, sql: str = ""):
+        cur = await self.db.cursor()
+        tables = await cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        table_names = [t[0] for t in await tables.fetchall()]
+        content = f"`{await get_database_latency(self.bot.db):.3f}ms, {len(table_names)} tables loaded`"
+        msg = await ctx.reply(content)
+        if sql != "":
+            res = await cur.execute(sql)
+            await msg.edit(content=f"{content}\n```\n{await res.fetchall()}```")
 
 
 async def setup(bot):

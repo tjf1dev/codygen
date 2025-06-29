@@ -9,3 +9,5 @@ colorama
 jishaku
 pillow
 python-dateutil
+sqlite3
+aiosqlite
