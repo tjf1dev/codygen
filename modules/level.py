@@ -7,6 +7,8 @@ from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from main import Color, set_guild_config_key, get_guild_config, logger, verify
 import traceback
+from ext.utils import xp_to_level, _old_xp_to_level
+from ext.views import LevelupLayout
 
 
 def split_embed_description(lines, max_length=4096) -> list:
@@ -28,27 +30,6 @@ def split_embed_description(lines, max_length=4096) -> list:
         chunks.append("\n".join(current))
 
     return chunks
-
-
-def _old_xp_to_level(xp):
-    level = 1
-    xp_needed = 100
-    increment = 50
-
-    while xp >= xp_needed:
-        xp -= xp_needed
-        level += 1
-        xp_needed += increment
-
-    return level
-
-
-def xp_to_level(xp) -> int:
-    level = 1
-    while xp >= 75 * (level**1.15):
-        xp -= 75 * (level**1.15)
-        level += 1
-    return level
 
 
 def boost_value(value, percentage) -> int:
@@ -171,7 +152,11 @@ class ConfirmBoost(discord.ui.View):
 
     async def abort_button(self, interaction: discord.Interaction):
         await interaction.response.send_message("action cancelled.", ephemeral=True)
-async def send_levelup(user: discord.Member, guild: discord.Guild, xp, new_xp):
+
+
+async def send_levelup(
+    user: discord.Member, guild: discord.Guild, xp, new_xp, highest_boost: int
+):
     """
     Sends a levelup message to the channel configured in the guild config.
     """
@@ -187,19 +172,29 @@ async def send_levelup(user: discord.Member, guild: discord.Guild, xp, new_xp):
     channel: discord.TextChannel = await guild.fetch_channel(channel_id)
     if not channel:
         return
-    old_level = xp_to_level(xp- int(new_xp))
-    new_level = xp_to_level(xp)
-    embed = discord.Embed(
-        title="",
-        description=f"{user.mention}: `{old_level}` > `{new_level}`, `{xp}xp`\n",
-        color=discord.Color.green(),
+    data = await get_guild_config(guild.id)
+    users = data.get("stats", {}).get("level", {}).get("users", {})
+    sorted_users = sorted(users.items(), key=lambda x: x[1].get("xp", 0), reverse=True)
+    place_in_leaderboard = next(
+        (
+            i
+            for i, (user_id, _) in enumerate(sorted_users, start=1)
+            if user_id == str(user.id)
+        ),
+        None,
     )
-    embed.set_thumbnail(url=user.display_avatar.url)
-    await channel.send(embed=embed)
+    # old_level = xp_to_level(xp - int(new_xp))
+    # new_level = xp_to_level(xp)
+    view = LevelupLayout(
+        user, xp - int(new_xp), new_xp, place_in_leaderboard, highest_boost
+    )
+    await channel.send(view=view)
+
+
 async def xp(user: discord.Member, guild: discord.Guild):
     """
-        Main handler for xp gain
-        This takes boosts to account, levelup message is sent seperately
+    Main handler for xp gain
+    This takes boosts to account, levelup message is sent seperately
     """
     if user.bot:
         return
@@ -207,6 +202,7 @@ async def xp(user: discord.Member, guild: discord.Guild):
     try:
         guild_config = await get_guild_config(guild.id)
         users = guild_config.get("stats", {}).get("level", {}).get("users", {})
+        old_xp = users.get(str(user.id), {}).get("xp", 0)
         xp_per_message = (
             guild_config.get("modules", {})
             .get("level", {})
@@ -236,22 +232,22 @@ async def xp(user: discord.Member, guild: discord.Guild):
         xp_with_boost = xp_per_message * (1 + highest_boost / 100)
         user_xp = users.get(str(user.id), {}).get("xp", 0)
 
-        logger.debug(
-            f"{user.name} now has {user_xp}xp"
-        )
+        logger.debug(f"{user.name} now has {user_xp}xp")
         await set_guild_config_key(
             guild.id,
             f"stats.level.users.{user.id}.xp",
             int(user_xp + xp_with_boost),
         )
-
-        # old_level = xp_to_level(
-        #     guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
-        #     - int(xp_with_boost)
-        # )
+        xp = int(user_xp + xp_with_boost)
+        old_level = xp_to_level(
+            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
+            - int(xp_with_boost)
+        )
         new_level = xp_to_level(
             guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
         )
+        if new_level > old_level:
+            await send_levelup(user, guild, old_xp, xp, highest_boost)
         try:
             level_roles = guild_config["modules"]["level"]["rewards"]
             for role_level, role_id in level_roles.items():
@@ -282,15 +278,17 @@ async def xp(user: discord.Member, guild: discord.Guild):
         logger.error(f"Error in xp handler: {e}")
         logger.error(traceback.format_exc())
         return
+
+
 class level(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Track and reward users for activity"
 
-
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
         await xp(message.author, message.guild)
+
     # await channel.send(
     #     f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
     #     f"\nxp boost: **{highest_boost}%**!"
@@ -701,7 +699,7 @@ class level(commands.Cog):
 
             font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 96)
             font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
-            font_light = ImageFont.truetype("assets/ClashDisplay-Extralight.ttf", 22)
+            font_light = ImageFont.truetype("assets/ClashDisplay-Medium.ttf", 22)
 
             avatar_asset = user.display_avatar.replace(size=32)
             buffer = io.BytesIO(await avatar_asset.read())
@@ -791,12 +789,14 @@ class level(commands.Cog):
             sorted_users = sorted(
                 users.items(), key=lambda x: x[1].get("xp", 0), reverse=True
             )
-            img = Image.new("RGB", (450, 512), color=(0, 0, 0))
+            # Upscaled image size: 450*3 x 512*3 = 1350 x 1536
+            img = Image.new("RGB", (1350, 1536), color=(0, 0, 0))
             d = ImageDraw.Draw(img)
 
-            # font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 48)
-            font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
-            font_light = ImageFont.truetype("assets/ClashDisplay-Extralight.ttf", 22)
+            font = ImageFont.truetype("assets/ClashDisplay-Semibold.ttf", 72)  # 24 * 3
+            font_light = ImageFont.truetype(
+                "assets/ClashDisplay-Regular.ttf", 66
+            )  # 22 * 3
 
             valid_users = []
             count = 0
@@ -813,28 +813,44 @@ class level(commands.Cog):
                 xp = user_data.get("xp", 0)
                 level = xp_to_level(xp)
 
-                avatar_asset = user.display_avatar.replace(size=32)
+                avatar_asset = user.display_avatar.replace(
+                    size=128
+                )  # valid power of 2 ≥ 96
                 buffer = io.BytesIO(await avatar_asset.read())
-                avatar = Image.open(buffer).convert("RGBA").resize((32, 32))
+                avatar = Image.open(buffer).convert("RGBA").resize((128, 128))
 
-                mask = Image.new("L", (32, 32), 0)
+                mask = Image.new("L", (128, 128), 0)
                 mask_draw = ImageDraw.Draw(mask)
-                mask_draw.ellipse((0, 0, 32, 32), fill=255)
+                mask_draw.ellipse((0, 0, 128, 128), fill=255)
 
-                avatar = ImageOps.fit(avatar, (32, 32))
+                avatar = ImageOps.fit(avatar, (128, 128))
                 avatar.putalpha(mask)
 
-                img.paste(avatar, (16, 16 + (i - 1) * 48), avatar)
+                y_pos = 16 * 3 + (i - 1) * 48 * 3  # vertical spacing scaled by 3
+
+                img.paste(avatar, (16 * 3, y_pos), avatar)
+
+                # Calculate vertical centering for xp/level text
+                bbox = d.textbbox((0, 0), f"{level} • {xp}xp", font=font_light)
+                text_height = bbox[3] - bbox[1]
+                text_y = y_pos + 128 // 2 - text_height // 2
+
                 d.text(
-                    ((450 - 16), 16 + (i - 1) * 48),
-                    f"Level {level} • {xp}xp",
+                    (1350 - 16 * 3, text_y),
+                    f"{level} • {xp}xp",
                     font=font_light,
                     fill=(255, 255, 255),
                     anchor="rt",
                 )
+
+                # Calculate vertical centering for username text
+                bbox_name = d.textbbox((0, 0), "A", font=font)
+                text_height_name = bbox_name[3] - bbox_name[1]
+                text_y_name = y_pos + 128 // 2 - text_height_name // 2
+
                 if len(user.name) < 13:
                     d.text(
-                        (56, 16 + (i - 1) * 48),
+                        (56 * 3 + 20, text_y_name),
                         str(i) + ". " + user.name,
                         font=font,
                         fill=(255, 255, 255),
@@ -842,7 +858,7 @@ class level(commands.Cog):
                     )
                 else:
                     d.text(
-                        (56, 16 + (i - 1) * 48),
+                        (56 * 3 + 20, text_y_name),
                         str(i) + ". " + user.name[:12] + "...",
                         font=font,
                         fill=(255, 255, 255),
@@ -874,6 +890,7 @@ class level(commands.Cog):
             return
         if user is None:
             user = ctx.author
+        await set_guild_config_key(ctx.guild.id, f"stats.level.users.{user.id}.xp", xp)
         await set_guild_config_key(
             ctx.guild.id, f"stats.level.users.{user.id}.xp", xp
         )  # TODO this will also change in the new config system, im marking every new change of mine
@@ -960,4 +977,3 @@ class level(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(level(bot))
-#test

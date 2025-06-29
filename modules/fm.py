@@ -89,6 +89,9 @@ class fmActionRow(discord.ui.ActionRow):
         current_vote = self.voted_users.get(user_id)
 
         if current_vote == "up":
+            # if interaction.user.id == 978596696156147754:
+            #     button.label = str(int(button.label) + 100)
+            #     return
             self.voted_users.pop(user_id)
             button.label = str(int(button.label) - 1)
         elif current_vote == "down":
@@ -103,7 +106,9 @@ class fmActionRow(discord.ui.ActionRow):
 
 
 class fmLayout(discord.ui.LayoutView):
-    def __init__(self, interaction: discord.Interaction, track_info: dict):
+    def __init__(
+        self, interaction: discord.Interaction, track_info: dict, timeout=None
+    ):
         super().__init__()
         container = discord.ui.Container()
         container.add_item(fmSection(track_info))
