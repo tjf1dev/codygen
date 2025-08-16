@@ -11,6 +11,7 @@ import json
 from discord.ext import commands
 from discord import app_commands
 from main import Color, logger
+import aiofiles
 
 
 async def get_average_color(url):
@@ -23,6 +24,89 @@ async def get_average_color(url):
             g = sum(p[1] for p in pixels) // len(pixels)
             b = sum(p[2] for p in pixels) // len(pixels)
             return (r, g, b)
+
+
+class fmSection(discord.ui.Section):
+    def __init__(self, track_info: dict):
+        accessory = discord.ui.Thumbnail(media=track_info["image"])
+
+        super().__init__(accessory=accessory)
+        display_text = (
+            f"## [{track_info['track']}]({track_info['url']})\n"
+            f"{track_info['artist']} • {track_info['album']}\n"
+            f"{track_info['track_scrobble_count']} scrobbles, "
+            f"{track_info['scrobble_count']} total"
+        )
+
+        self.add_item(discord.ui.TextDisplay(display_text))
+
+
+class fmActionRow(discord.ui.ActionRow):
+    def __init__(self, track_info: dict):
+        super().__init__()
+        self.voted_users = {}  # {user_id: "up" or "down"}
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.secondary,
+        emoji="<:downvote:1388512428484198482>",
+        label="0",
+    )
+    async def downvote(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        await interaction.response.defer()
+        user_id = interaction.user.id
+        upvote_button = next(b for b in self.children if b.emoji.name == "upvote")
+
+        current_vote = self.voted_users.get(user_id)
+
+        if current_vote == "down":
+            self.voted_users.pop(user_id)
+            button.label = str(int(button.label) - 1)
+        elif current_vote == "up":
+            self.voted_users[user_id] = "down"
+            button.label = str(int(button.label) + 1)
+            upvote_button.label = str(int(upvote_button.label) - 1)
+        else:
+            self.voted_users[user_id] = "down"
+            button.label = str(int(button.label) + 1)
+
+        await interaction.message.edit(view=self.view)
+
+    @discord.ui.button(
+        style=discord.ButtonStyle.secondary,
+        emoji="<:upvote:1388512426059759657>",
+        label="0",
+    )
+    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        user_id = interaction.user.id
+
+        downvote_button = next(b for b in self.children if b.emoji.name == "downvote")
+
+        current_vote = self.voted_users.get(user_id)
+
+        if current_vote == "up":
+            self.voted_users.pop(user_id)
+            button.label = str(int(button.label) - 1)
+        elif current_vote == "down":
+            self.voted_users[user_id] = "up"
+            button.label = str(int(button.label) + 1)
+            downvote_button.label = str(int(downvote_button.label) - 1)
+        else:
+            self.voted_users[user_id] = "up"
+            button.label = str(int(button.label) + 1)
+
+        await interaction.message.edit(view=self.view)
+
+
+class fmLayout(discord.ui.LayoutView):
+    def __init__(self, track_info: dict):
+        super().__init__()
+        container = discord.ui.Container()
+        container.add_item(fmSection(track_info))
+        container.add_item(fmActionRow(track_info))
+        self.add_item(container)
 
 
 class lastfmAuthView(discord.ui.View):
@@ -138,6 +222,9 @@ class fm(commands.Cog):
             "artist": artist,
             "track": track_name,
             "album": album,
+            "image": data_track_info["track"]["album"]["image"][
+                len(data_track_info["track"]["album"]["image"]) - 1
+            ]["#text"],
             "url": url,
             "now_playing": is_now_playing,
             "scrobble_count": scrobble_count,
@@ -187,21 +274,22 @@ class fm(commands.Cog):
     )
     async def fm(self, ctx: commands.Context):
         try:
-            with open("data/last.fm/users.json", "r") as f:
-                data = json.load(f)
+            async with aiofiles.open("data/last.fm/users.json", "r") as f:
+                content = await f.read()
+                data = json.loads(content)
                 username = (
                     data.get(str(ctx.author.id), {}).get("session", {}).get("name", {})
                 )
             track_info_raw = await self.fetch_now_playing(username)
             track_info = track_info_raw[0]
             # Create embed with track scrobble count
-            e = discord.Embed(
-                description=f"## [{track_info['track']}]({track_info['url']})\n### by {track_info['artist']}, on {track_info['album']}\n{track_info['track_scrobble_count']} scrobbles • {track_info['scrobble_count']} total",
-                color=Color.lblue,
-            )
-            e.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar.url)
+            # e = discord.Embed(
+            #     description=f"## [{track_info['track']}]({track_info['url']})\n### by {track_info['artist']}, on {track_info['album']}\n{track_info['track_scrobble_count']} scrobbles • {track_info['scrobble_count']} total",
+            #     color=Color.lblue,
+            # )
+            # e.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar.url)
 
-            await ctx.reply(embed=e)
+            await ctx.reply(view=fmLayout(track_info), mention_author=False)
         except FileNotFoundError:
             e = discord.Embed(
                 title="Not logged in!",

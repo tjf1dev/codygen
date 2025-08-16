@@ -5,7 +5,7 @@ from main import Color, custom_api_request
 from dateutil import parser
 
 
-class Applications(commands.Cog):
+class applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Manage server applications, if you have them enabled."
@@ -61,4 +61,4 @@ class Applications(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(Applications(bot))
+    await bot.add_cog(applications(bot))

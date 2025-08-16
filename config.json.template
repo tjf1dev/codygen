@@ -33,7 +33,7 @@
     "template": {
         
         "guild": {
-            "config_ver":11,
+            "config_ver":12,
             "stats":{
                 "level":{},
                 "ticket":[],
