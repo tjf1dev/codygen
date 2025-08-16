@@ -3,12 +3,13 @@ from discord.ext import commands
 from discord import app_commands
 from main import Color, custom_api_request
 from dateutil import parser
+from ext.logger import logger
 
 
 class applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = "Manage server applications, if you have them enabled."
+        self.description = "manage server applications, if you have them enabled."
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
@@ -18,11 +19,14 @@ class applications(commands.Cog):
     async def apps(self, ctx: commands.Context):
         pass
 
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
     @commands.has_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @apps.command(
         name="view-form",
-        description="View the server's application form. This category is still in development",
+        description="view the server's application form. this category is still in development",
     )
     async def view_form(self, ctx: commands.Context):
         raw = await custom_api_request(

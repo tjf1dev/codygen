@@ -1,25 +1,23 @@
-from main import (
-    verify,
-    request,
-    request_with_json,
-    get_global_config,
-    get_guild_config,
-    words,
-)
+from main import verify, request_with_json, get_global_config
 import discord
 import requests
-import aiohttp
+import aiosqlite
+import hashlib
 import random
 import csv
 from discord.ext import commands
 from ext.colors import Color
 from ext.logger import logger
+from discord import app_commands
 
 
 class fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "fun commands!"
+
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     @commands.hybrid_group(
         name="fun", description="fun commands!", invoke_without_command=True
@@ -32,43 +30,48 @@ class fun(commands.Cog):
         logger.info(f"{self.__class__.__name__}: loaded.")
 
     @verify()
-    @fun_group.command(name="ship", description="SHIP TWO PEOPLE")
+    @fun_group.command(name="ship", description="ship two people")
+    @app_commands.describe(
+        user1="users to ship", user2="users to ship (defaults to you)"
+    )
     async def ship(
         self,
         ctx: commands.Context,
-        user1: discord.User = None,
+        user1: discord.User,
         user2: discord.User = None,
     ):
         if user2 is None:
             user2 = ctx.author
         # name1 = user1.name
         # name2 = user2.name
-        ship = str(random.randint(0, 100))
-        exceptions_100 = [
-            [1201995223996321886, 1191871707577864203],
-            [978596696156147754, 1201995223996321886],
-        ]
+        def generate_number_from_strings(str1, str2):
+            combined = str1 + str2
+            hash_object = hashlib.sha256(combined.encode())
+            hex_digest = hash_object.hexdigest()
+            int_value = int(hex_digest, 16)
+            number = (int_value % 100) + 1  # Maps to 1-100
+            return number
 
-        def is_exception(id):
-            for e in exceptions_100:
-                if id in e:
-                    return True
-
+        ship = str(generate_number_from_strings(user1.name, user2.name))
+        exceptions = {
+            (1201995223996321886, 1191871707577864203): 100,
+            (978596696156147754, 1201995223996321886): 100,
+            (1379503145658486994, 1337509693874245682): 100
+        }
         if user1 == user2:
             ship = 100
-        if is_exception(user1.id) and is_exception(user2.id):
-            ship = 100
+        value = exceptions.get((user1.id, user2.id)) or exceptions.get((user2.id, user1.id)) or ship
         embed = discord.Embed(
             title="ship",
-            description=f"ship between {user1.mention} and {user2.mention} is {ship}%",
+            description=f"ship between {user1.mention} and {user2.mention} is {value}%",
             color=Color.accent_og,
         )
         await ctx.reply(embed=embed)
 
-    @verify()
-    @fun_group.command(name="awawawa", description="awawawawawawa")
-    async def awawawa(self, ctx: commands.Context):
-        await ctx.reply(random.choice(words), ephemeral=True)
+    # @verify()
+    # @fun_group.command(name="awawawa", description="awawawawawawa")
+    # async def awawawa(self, ctx: commands.Context):
+    #     await ctx.reply(random.choice(words), ephemeral=True)
 
     @verify()
     @fun_group.command(
@@ -116,6 +119,7 @@ class fun(commands.Cog):
         await ctx.reply(embed=e)
 
     @fun_group.command(name="word", description="get definition of an english word")
+    @app_commands.describe(word="the word to get a definition of")
     async def word(self, ctx: commands.Context, *, word: str):
         entry: list | dict = await request_with_json(
             f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
@@ -149,29 +153,19 @@ class fun(commands.Cog):
         await ctx.reply(embeds=embeds, ephemeral=False if found else True)
 
     @verify()
-    @fun_group.command(name="cute", description="cute command")
-    async def cute(configself, ctx: commands.Context, user: discord.User = None):
-        if user:
-            await ctx.reply(f"{user.mention} is cute and silly :3")
-        else:
-            await ctx.reply("you are cute and silly :3", ephemeral=True)
-
-    @verify()
     @fun_group.command(name="wokemeter", description="see how WOKE someone is!")
+    @app_commands.describe(user="the user to check")
     async def wokemeter(self, ctx: commands.Context, user: discord.User = None):
-        config = await get_guild_config(ctx.guild.id)
-        woke = config["commands"]["wokemeter"]
-        woke_min = woke["woke_min"]
-        woke_max = woke["woke_max"]
-        exceptions = woke["exceptions"]
+        con: aiosqlite.Connection = self.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        res = await cur.execute(
+            "SELECT wokemeter_min, wokemeter_max FROM guild_commands WHERE guild_id=?",
+            (ctx.guild.id,),
+        )
+        row = await res.fetchall()
+        woke_min, woke_max = row[0]
         if user is None:
             user = ctx.author
-        if str(user.id) in exceptions.keys():
-            await ctx.reply(f"{user.mention} is **{exceptions[str(user.id)]}%** woke")
-            return
-        elif user.id == 1266572586528280668:
-            await ctx.reply(f"{user.mention} is **wamz** woke")
-            return
         if user.bot:
             await ctx.reply("bots cant be woke :broken_heart:")
             return
@@ -300,7 +294,7 @@ class guessNewGame(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="New Game", style=discord.ButtonStyle.green, custom_id="new_game"
+        label="new game", style=discord.ButtonStyle.green, custom_id="new_game"
     )
     async def new_game(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -360,7 +354,7 @@ class Questionnaire(discord.ui.Modal, title="Guess the user!"):
             await interaction.response.send_message(embed=embed, view=guessNewGame())
         else:
             embed = discord.Embed(color=Color.negative)
-            embed.add_field(name="Wrong!", value=" ", inline=True)
+            embed.add_field(name="wrong!", value=" ", inline=True)
             embed.set_author(
                 name=interaction.user.name + f" tried: {guessOG}",
                 icon_url=interaction.user.avatar.url,
@@ -379,14 +373,14 @@ class guessButtons(discord.ui.View):
         for child in self.children:
             child.disabled = True
         e = discord.Embed(
-            title="Time's up!",
-            description=f"The user was... {self.guess_user}",
+            title="time's up!",
+            description=f"the user was... {self.guess_user}",
             color=Color.negative,
         )
         await self.interaction.message.edit(view=self)
         await self.interaction.followup.send(embed=e)
 
-    @discord.ui.button(label="Guess", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="guess", style=discord.ButtonStyle.red)
     async def confirm(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):

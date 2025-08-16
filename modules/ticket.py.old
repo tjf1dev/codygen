@@ -5,6 +5,7 @@ import json
 import time
 from main import logger, verify, get_guild_config
 
+
 class ticket(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -13,6 +14,9 @@ class ticket(commands.Cog):
     @commands.hybrid_group(name="ticket", description="create and manage tickets")
     async def ticket(self, ctx: commands.Context):
         pass
+
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     @verify()
     @ticket.command("create", description="create a ticket.")

@@ -5,10 +5,85 @@ import time
 from discord.ext import commands
 from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from main import Color, set_guild_config_key, get_guild_config, logger, verify
-import traceback
-from ext.utils import xp_to_level, _old_xp_to_level
+from main import logger, verify
+from ext.utils import xp_to_level, level_to_xp
 from ext.views import LevelupLayout
+import aiosqlite
+from ext.ui_base import Message
+from ext.views import LevelRefreshSummary, LevelBoosts
+from ext.colors import Color
+
+
+async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
+    # fetch global boost (guild)
+    global_boost_res = await cur.execute(
+        "SELECT percentage, expires FROM global_boosts WHERE guild_id=?", (guild.id,)
+    )
+    global_boost_row = await global_boost_res.fetchone()
+    if global_boost_row is None:
+        global_boost = {"percentage": 0, "expires": 0}
+    else:
+        global_boost = {
+            "percentage": global_boost_row[0],
+            "expires": global_boost_row[1],
+        }
+
+    # fetch role boosts
+    try:
+        user_roles = [role.id for role in user.roles]
+    except AttributeError:
+        user_roles = []
+    # fetch user boosts
+    user_boost_res = await cur.execute(
+        "SELECT percentage, expires FROM user_boosts WHERE guild_id=? AND user_id=?",
+        (guild.id, user.id),
+    )
+    user_boost_rows = await user_boost_res.fetchone()
+
+    if not user_boost_rows:
+        user_boost = {"percentage": 0, "expires": 0}
+    else:
+        user_boost = {
+            "percentage": user_boost_rows[0],
+            "expires": user_boost_rows[1],
+        }
+    role_boosts = await get_active_role_boosts(cur, user_roles)
+
+    multiplier = 0
+
+    multiplier += global_boost["percentage"]
+    multiplier += user_boost["percentage"]
+    for boost in role_boosts.keys():
+        multiplier += role_boosts[boost]["percentage"]
+    return {
+        "multiplier": multiplier,
+        "user": user_boost,
+        "global": global_boost,
+        "role": role_boosts,
+    }
+
+
+async def get_active_role_boosts(cur, role_ids):
+    if not role_ids:
+        return {}
+
+    placeholders = ",".join("?" for _ in role_ids)
+    query = f"""
+        SELECT role_id, percentage, expires FROM role_boosts
+        WHERE role_id IN ({placeholders})
+    """
+    cursor = await cur.execute(query, role_ids)
+    rows = await cursor.fetchall()
+
+    now = time.time()
+    active_boosts = {}
+    for role_id, percentage, expires in rows:
+        if expires == -1 or expires > now:
+            active_boosts[role_id] = {
+                "percentage": percentage,
+                "expires": expires,
+            }
+    return active_boosts
 
 
 def split_embed_description(lines, max_length=4096) -> list:
@@ -36,7 +111,7 @@ def boost_value(value, percentage) -> int:
     return value * (1 + percentage / 100)
 
 
-def timestamp(unix: int | str, type: str, infinite_msg: str = "infinite") -> str:
+def timestamp(unix: int | str, type: str = "R", infinite_msg: str = "never") -> str:
     """
     Generates a Discord timestamp out of a Unix timestamp.
     -1 for infinite
@@ -46,143 +121,37 @@ def timestamp(unix: int | str, type: str, infinite_msg: str = "infinite") -> str
     return f"<t:{unix}" + f":{type}>" if type else ">"
 
 
-class ConfirmBoost(discord.ui.View):
-    def __init__(
-        self,
-        author: discord.User,
-        type: int,
-        percentage: int,
-        expires: int,
-        confirm: int = 0,
-        id: int = 0,
-    ):
-        super().__init__(timeout=30)
-        self.author = author
-        self.type = type
-        self.percentage = percentage
-        self.expires = expires
-        self.confirm = confirm
-        self.id = id
-        confirm_name = "Confirm"
-        if confirm == 1:
-            confirm_name = "Replace"
-        self.confirm_button = discord.ui.Button(
-            label=confirm_name, style=discord.ButtonStyle.danger
-        )
-        self.confirm_button.callback = self.replace_button
-        self.add_item(self.confirm_button)
-        abort_button = discord.ui.Button(
-            label="Abort", style=discord.ButtonStyle.secondary
-        )
-        abort_button.callback = self.abort_button
-        self.add_item(abort_button)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user.id != self.author.id:
-            await interaction.response.send_message(
-                "you're not allowed to use this", ephemeral=True
-            )
-            return False
-        return True
-
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
-        try:
-            timeout = discord.Embed(title="timed out.", color=Color.gray)
-            await self.message.edit(view=self, embed=timeout)
-        except Exception:
-            pass
-
-    async def replace_button(self, interaction: discord.Interaction):
-        global_success_new = discord.Embed(
-            title="success",
-            description=f"### a **{self.percentage}%** global boost is now active!\nexpires {timestamp(self.expires, 'R', 'never')}: {timestamp(self.expires, 'f')} (`{self.expires}`)",
-            color=Color.green,
-        )
-        global_success_delete = discord.Embed(
-            title="success",
-            description="### all global boosts have been disabled",
-            color=Color.green,
-        )
-        global_success_replace = discord.Embed(
-            title="success",
-            description=f"### an old global boost has been replaced with a **{self.percentage}%** boost!\nexpires: {timestamp(self.expires, 'R', 'never')}: {timestamp(self.expires,'f')} (`{self.expires}`)",
-            color=Color.green,
-        )
-        if self.type == 0:
-            if self.confirm == 1:
-                embed = global_success_replace
-            else:
-                embed = global_success_new
-            if self.percentage == 0:
-                embed = global_success_delete
-            await set_guild_config_key(
-                interaction.guild.id,
-                "modules.level.boost.global.percentage",
-                self.percentage,
-            )
-            await set_guild_config_key(
-                interaction.guild.id, "modules.level.boost.global.expires", self.expires
-            )
-        elif self.type == 1:
-            await set_guild_config_key(
-                interaction.guild.id,
-                f"modules.level.boost.role.{self.id}.percentage",
-                self.percentage,
-            )
-            await set_guild_config_key(
-                interaction.guild.id,
-                f"modules.level.boost.role.{self.id}.expires",
-                self.expires,
-            )
-        elif self.type == 2:
-            await set_guild_config_key(
-                interaction.guild.id,
-                f"modules.level.boost.user.{self.id}.percentage",
-                self.percentage,
-            )
-            await set_guild_config_key(
-                interaction.guild.id,
-                f"modules.level.boost.user.{self.id}.expires",
-                self.expires,
-            )
-
-        await interaction.response.edit_message(embed=embed, view=None)
-
-    async def abort_button(self, interaction: discord.Interaction):
-        await interaction.response.send_message("action cancelled.", ephemeral=True)
-
-
 async def send_levelup(
-    user: discord.Member, guild: discord.Guild, xp, new_xp, highest_boost: int
+    user: discord.Member,
+    guild: discord.Guild,
+    xp,
+    new_xp,
+    highest_boost: int,
+    cur: aiosqlite.Cursor,
 ):
     """
     Sends a levelup message to the channel configured in the guild config.
     """
-    guild_config = await get_guild_config(guild.id)
-    channel_id = (
-        guild_config.get("modules", {})
-        .get("level", {})
-        .get("levelup", {})
-        .get("channel")
+    rank_res = await cur.execute(
+        "SELECT COUNT(*) FROM users WHERE guild_id=? AND xp > ?",
+        (guild.id, xp),
     )
+    rank_row = await rank_res.fetchone()
+    place_in_leaderboard = rank_row[0] if rank_row else 1
+    # logger.debug(f"place in leaderboard: {place_in_leaderboard}")
+    if user.bot:
+        return
+    cid_res = await cur.execute(
+        "SELECT levelup_channel FROM guilds WHERE guild_id=?", (guild.id,)
+    )
+    cid_row = await cid_res.fetchone()
+    channel_id = cid_row[0]
     if not channel_id:
         return
     channel: discord.TextChannel = await guild.fetch_channel(channel_id)
+    # logger.debug(f"levelup channel: {channel_id}")
     if not channel:
         return
-    data = await get_guild_config(guild.id)
-    users = data.get("stats", {}).get("level", {}).get("users", {})
-    sorted_users = sorted(users.items(), key=lambda x: x[1].get("xp", 0), reverse=True)
-    place_in_leaderboard = next(
-        (
-            i
-            for i, (user_id, _) in enumerate(sorted_users, start=1)
-            if user_id == str(user.id)
-        ),
-        None,
-    )
     # old_level = xp_to_level(xp - int(new_xp))
     # new_level = xp_to_level(xp)
     view = LevelupLayout(
@@ -191,788 +160,571 @@ async def send_levelup(
     await channel.send(view=view)
 
 
-async def xp(user: discord.Member, guild: discord.Guild):
+async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connection):
     """
     Main handler for xp gain
     This takes boosts to account, levelup message is sent seperately
     """
-    if user.bot:
-        return
-    per_message_default = 10
-    try:
-        guild_config = await get_guild_config(guild.id)
-        users = guild_config.get("stats", {}).get("level", {}).get("users", {})
-        old_xp = users.get(str(user.id), {}).get("xp", 0)
-        xp_per_message = (
-            guild_config.get("modules", {})
-            .get("level", {})
-            .get("per_message", per_message_default)
-        )
-        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
-        if float(global_boost.get("expires")) < time.time():
-            global_boost_value = 0
-        else:
-            global_boost_value = global_boost.get("percentage")
-        role_boosts: dict = boosts.get("role", {})
-        user_boosts: dict = boosts.get("user", {})
-        highest_boost = global_boost_value
-        user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
-        if user_boost["expires"] > time.time():
-            highest_boost = max(highest_boost, user_boost["percentage"])
-        for role in user.roles:
-            role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
-            if role_boost["expires"] > time.time():
-                highest_boost = max(highest_boost, role_boost["percentage"])
-        highest_boost = (
-            global_boost_value
-            + user_boost.get("percentage")
-            + role_boost.get("percentage")
-        )
-        xp_with_boost = xp_per_message * (1 + highest_boost / 100)
-        user_xp = users.get(str(user.id), {}).get("xp", 0)
+    cur: aiosqlite.Cursor = await con.cursor()
 
-        logger.debug(f"{user.name} now has {user_xp}xp")
-        await set_guild_config_key(
-            guild.id,
-            f"stats.level.users.{user.id}.xp",
-            int(user_xp + xp_with_boost),
-        )
-        xp = int(user_xp + xp_with_boost)
-        old_level = xp_to_level(
-            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
-            - int(xp_with_boost)
-        )
-        new_level = xp_to_level(
-            guild_config["stats"]["level"]["users"][str(user.id)]["xp"]
-        )
-        if new_level > old_level:
-            await send_levelup(user, guild, old_xp, xp, highest_boost)
-        try:
-            level_roles = guild_config["modules"]["level"]["rewards"]
-            for role_level, role_id in level_roles.items():
-                role = guild.get_role(role_id)
-                if role is not None:
-                    if new_level >= int(role_level):
-                        if role not in user.roles:
-                            await user.add_roles(role)
-                    else:
-                        if role in user.roles:
-                            await user.remove_roles(role)
-        except FileNotFoundError:
-            pass
-        try:
-            level_roles = guild_config["modules"]["level"]["rewards"]
-            for role_level, role_id in level_roles.items():
-                role = guild.get_role(role_id)
-                if role is not None:
-                    if new_level >= int(role_level):
-                        if role not in user.roles:
-                            await user.add_roles(role)
-                    else:
-                        if role in user.roles:
-                            await user.remove_roles(role)
-        except FileNotFoundError:
-            pass
-    except Exception as e:
-        logger.error(f"Error in xp handler: {e}")
-        logger.error(traceback.format_exc())
-        return
+    # fetch xp per message
+    per_message_res = await cur.execute(
+        "SELECT level_per_message FROM guilds WHERE guild_id = ?", (guild.id,)
+    )
+    per_message_row = await per_message_res.fetchone()
+
+    # fetch current xp of user
+    xp_res = await cur.execute(
+        "SELECT xp FROM users WHERE guild_id = ? AND user_id = ?", (guild.id, user.id)
+    )
+    xp_row = await xp_res.fetchone()
+
+    base = per_message_row[0] if per_message_row else 0
+    xp = xp_row[0] if xp_row else 0
+    multiplier_func = await get_boosts(cur, guild, user)
+    multiplier = multiplier_func["multiplier"]
+    add = int(base * (1 + multiplier / 100))
+    # ensure row exists
+    await cur.execute(
+        "INSERT OR IGNORE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
+        (guild.id, user.id, 0),
+    )
+
+    # then update counter
+    await cur.execute(
+        "UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
+        (add, guild.id, user.id),
+    )
+    new_xp = xp + add
+    level = xp_to_level(xp)
+    new_level = xp_to_level(new_xp)
+    if new_level > level:
+        logger.debug(f"{user.id} leveled up from {level} {xp} to {new_level} {new_xp}")
+        await send_levelup(user, guild, xp, new_xp, multiplier, cur)
+    await con.commit()
+    # logger.debug(f"added {add}xp to {user.id}. this puts them at level {xp_to_level(new_xp)}, with {new_xp}xp.")
 
 
 class level(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "Track and reward users for activity"
+        self.db: aiosqlite.Connection = bot.db
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
-        await xp(message.author, message.guild)
+        try:
+            await xp(message.author, message.guild, self.db)
+        except AttributeError:  # no db loaded yet
+            logger.warning("tried to obtain xp before fully initialized")
+            pass
 
-    # await channel.send(
-    #     f"## {user.mention}\nyou are now level **{new_level}**!\nxp: **{user_xp}**"
-    #     f"\nxp boost: **{highest_boost}%**!"
-    #     if highest_boost != 0
-    #     else ""
-    # )
-    @commands.Cog.listener()
-    async def on_ready(self):
-        logger.info(f"{self.__class__.__name__}: loaded.")
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.guild_only()
     @commands.hybrid_group(
-        name="level", description="Track and reward users for activity"
+        name="level", description="track and reward users for activity"
     )
     async def level(self, ctx: commands.Context):
         pass
 
-    # * writing code can be painful sometimes
-    # this hurts
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.guild_only()
     @level.group(name="boost", description="manage xp boosts")
     async def boost(self, ctx: commands.Context):
         pass
 
-    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @level.command(name="boosts", description="view your active boosts")
-    async def boosts(self, ctx: commands.Context):
-        guild_config = await get_guild_config(ctx.guild.id)
-        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        # logger.debug("all boosts gathered")
-
-        highest_boost_value = 0
-        # highest_boost_type = -1  # -1 = none, 0 = global, 1 = role, 2 = user
-
-        global_boost = boosts.get("global", {"percentage": 0, "expires": 0})
-        if global_boost["expires"] > time.time() or global_boost["expires"] == -1:
-            highest_boost_value = global_boost["percentage"]
-            # highest_boost_type = 0
-        else:
-            logger.warning(
-                f"global boost expired: {global_boost['expires']} < {time.time()}"
+    @app_commands.checks.has_permissions(administrator=True)
+    @boost.command(name="global", description="set a global boost to this server")
+    @app_commands.describe(
+        percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
+        duration="a unix timestamp of the expiry date. leave empty for infinite",
+    )
+    async def boost_global(
+        self, ctx: commands.Context, percentage: int, duration: int = -1
+    ):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        if percentage == 0:
+            await cur.execute(
+                "DELETE FROM global_boosts WHERE guild_id = ?", (ctx.guild.id,)
             )
-
-        role_boosts: dict = boosts.get("role", {})
-        user_boosts: dict = boosts.get("user", {})
-        # logger.debug("role and user boosts gathered")
-
-        for role in ctx.author.roles:
-            role_boost = role_boosts.get(str(role.id), {"expires": 0, "percentage": 0})
-            if (
-                role_boost["expires"] > time.time()
-                and role_boost["percentage"] > highest_boost_value
-            ):
-                highest_boost_value = role_boost["percentage"]
-                # highest_boost_type = 1
-
-        user_boost = user_boosts.get(
-            str(ctx.author.id), {"expires": 0, "percentage": 0}
-        )
-        if (
-            user_boost["expires"] > time.time()
-            and user_boost["percentage"] > highest_boost_value
-        ):
-            highest_boost_value = user_boost["percentage"]
-            # highest_boost_type = 2
-
-        boost_data = [
-            ("🌐 global", global_boost),
-            ("🏷️ role", role_boost),
-            ("👤 user", user_boost),
-        ]
-
-        active_boosts = []
-        inactive_boosts = []
-        total = 0
-
-        for name, data in boost_data:
-            percent = data.get("percentage", 0)
-            expires = data.get("expires", 0)
-            if expires > time.time():
-                active_boosts.append(
-                    (
-                        percent,
-                        f"{name}: **`{percent}%`**\n-# expires {timestamp(expires, 'R')}\n",
-                    )
+            await con.commit()
+            await ctx.reply(
+                view=Message(
+                    "## removed successfully\nall previous global boosts have been removed",
+                    accent_color=Color.lgreen,
                 )
-                total += percent
-            else:
-                inactive_boosts.append((0, f"-# {name}: inactive"))
-
-        active_boosts.sort(key=lambda x: x[0], reverse=True)
-        all_boosts = active_boosts + inactive_boosts
-
-        lines = [b[1] for b in all_boosts]
-        if total > 0:
-            lines.append(f"### total: **`{total}%`**")
-            header = "## active boosts\n"
-        else:
-            header = "## no boosts active.\n"
-
-        description = header + "\n".join(lines)
-        e = discord.Embed(title="", description=description, color=Color.lblue)
-
-        await ctx.reply(embed=e, mention_author=False)
-
-    @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_permissions(administrator=True)
-    @app_commands.describe(
-        percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts",
-        expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'.",
-    )
-    @boost.command(name="global", description="change the global boost")
-    async def boost_global(self, ctx: commands.Context, percentage: int, expires: int):
-        guild_config = await get_guild_config(ctx.guild.id)
-        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
-        exists = False
-        if global_boost["expires"] > time.time() and global_boost["percentage"] > 0:
-            exists = True
-        fail_single = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### an error occured, please review it",
-        )
-        fail_multiple = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### errors occured, please review them",
-        )
-        fail_invalid_timestamp = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)",
-        )
-        fail_invalid_percentage = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)",
-        )
-        neutral_disable = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description="### `percentage` of 0 will disable every boost. are you sure?",
-        )
-        neutral_already_exists = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {global_boost['expires']})\nNEW: **{percentage}%** (until {timestamp(expires, 'f')})\nreplace?",
-        )
-        neutral_confirm = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### almost done!\nnow please confirm to apply the {percentage}% global boost.\nwill expire in {timestamp(expires, 'R')}",
-        )
-        # neutral_infinite_already_exists = discord.Embed(
-        #     title="",
-        #     color=Color.lyellow,
-        #     description=f"### already exists\nOLD: **{global_boost['percentage']}%** (until {timestamp(global_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        # )
-        # neutral_infinite_confirm = discord.Embed(
-        #     title="",
-        #     color=Color.lgreen,
-        #     description=f"### almost done!\nnow please confirm to apply the {global_boost['percentage']}% global boost.\nwill not expire.",
-        # )
-
-        embeds = []
-        fail = False
-        confirm = 1 if exists else 0
-        view = ConfirmBoost(ctx.author, 0, percentage, expires, confirm, 0)
-        if percentage == 0:
-            await ctx.reply(embed=neutral_disable, view=view)
+            )
             return
-        if expires < time.time() and expires != -1:
-            fail = True
-            embeds.append(fail_invalid_timestamp)
-        if percentage > 999999999999:  # percentage <= -1:
-            fail = True
-            embeds.append(fail_invalid_percentage)
-        if fail:
-            if len(embeds) == 1:
-                embeds.insert(0, fail_single)
-            else:
-                embeds.insert(0, fail_multiple)
-            await ctx.reply(embeds=embeds, mention_author=False)
+        if duration < time.time() and duration != -1:
+            await ctx.reply(
+                view=Message(
+                    "## invalid duration.\nplease make sure the expiry date is either a [valid unix timestamp](<https://www.unixtimestamp.com/>) or -1, for infinite duration",
+                    accent_color=Color.negative,
+                )
+            )
             return
-        if exists:
-            await ctx.reply(embed=neutral_already_exists, view=view)
-            return
-        await ctx.reply(embed=neutral_confirm, view=view)
 
-    @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_permissions(administrator=True)
-    @app_commands.describe(
-        percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts",
-        expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'.",
-    )
-    @boost.command(name="user", description="change a user's boost")
-    async def boost_user(
-        self, ctx: commands.Context, user: discord.Member, percentage: int, expires: int
-    ):
-        guild_config = await get_guild_config(ctx.guild.id)
-        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        user_boosts: dict = boosts.get("user", {})
-        user_boost: dict = user_boosts.get(
-            str(user.id), {"expires": 0, "percentage": 0}
+        await cur.execute(
+            """
+            INSERT OR REPLACE INTO global_boosts (guild_id, percentage, expires)
+            VALUES (?, ?, ?)
+            """,
+            (ctx.guild.id, percentage, duration),
         )
-        exists = False
-        if user_boost["expires"] > time.time() and user_boost["percentage"] > 0:
-            exists = True
-        fail_single = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### an error occured, please review it",
-        )
-        fail_multiple = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### errors occured, please review them",
-        )
-        fail_invalid_timestamp = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)",
-        )
-        fail_invalid_percentage = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)",
-        )
-        neutral_disable = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### successfully disabled {user.mention}'s boost.",
-        )
-        success_replaced = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### successfully replaces!\nOLD: **{user_boost['percentage']}%** (until {user_boost["expires"]}:f>)\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",
-        )
-        success_done = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### success\n{user.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",
-        )
-        # neutral_infinite_already_exists = discord.Embed(
-        #     title="",
-        #     color=Color.lyellow,
-        #     description=f"### already exists\nOLD: **{user_boost["percentage"]}%** (until {timestamp(user_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        # )
-        # neutral_infinite_confirm = discord.Embed(
-        #     title="",
-        #     color=Color.lgreen,
-        #     description=f"### almost done!\nnow please confirm to apply the {user_boost["percentage"]}% global boost.\nwill not expire.",
-        # )
-
-        embeds = []
-        fail = False
-        # confirm = 1 if exists else 0
-        if percentage == 0:
-            await ctx.reply(embed=neutral_disable)
-            return
-        if expires < time.time() and expires != -1:
-            fail = True
-            embeds.append(fail_invalid_timestamp)
-        if percentage > 999999999999:  # percentage <= -1:
-            fail = True
-            embeds.append(fail_invalid_percentage)
-        if fail:
-            if len(embeds) == 1:
-                embeds.insert(0, fail_single)
-            else:
-                embeds.insert(0, fail_multiple)
-            await ctx.reply(embeds=embeds, mention_author=False)
-            return
-        if exists:
-            await ctx.reply(embed=success_replaced)
-            return
-        await ctx.reply(embed=success_done)
-        await set_guild_config_key(
-            ctx.guild.id, f"modules.level.boost.user.{user.id}.percentage", percentage
-        )
-        await set_guild_config_key(
-            ctx.guild.id, f"modules.level.boost.user.{user.id}.expires", expires
+        await con.commit()
+        await ctx.reply(
+            view=Message(
+                f"## applied successfully.\na **{percentage}%** global boost has been set\nit will expire {timestamp(duration)}",
+                accent_color=Color.lgreen,
+            )
         )
 
     @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_permissions(administrator=True)
+    @boost.command(name="role", description="set a boost to a role")
     @app_commands.describe(
-        percentage="the percentage to set the boost to. setting it to '0' will disable all global boosts",
-        expires="the unix timestamp of the expiry date. you can make a boost last forever by setting expires to '-1'.",
+        percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
+        duration="a unix timestamp of the expiry date. leave empty for infinite",
     )
-    @boost.command(name="role", description="change a role's boost")
     async def boost_role(
-        self, ctx: commands.Context, role: discord.Role, percentage: int, expires: int
+        self,
+        ctx: commands.Context,
+        role: discord.Role,
+        percentage: int,
+        duration: int = -1,
     ):
-        guild_config = await get_guild_config(ctx.guild.id)
-        boosts: dict = guild_config.get("modules", {}).get("level", {}).get("boost", {})
-        role_boosts: dict = boosts.get("role", {})
-        role_boost: dict = role_boosts.get(
-            str(role.id), {"expires": 0, "percentage": 0}
-        )
-        exists = False
-        if role_boost["expires"] > time.time() and role_boost["percentage"] > 0:
-            exists = True
-        fail_single = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### an error occured, please review it",
-        )
-        fail_multiple = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### errors occured, please review them",
-        )
-        fail_invalid_timestamp = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `expires` value\nplease set `expires` to a valid unix timestamp in the future. you can generate a timestamp [here](<https://www.unixtimestamp.com/>\n-# hint: use `-1` to make the boost last forever)",
-        )
-        fail_invalid_percentage = discord.Embed(
-            title="",
-            color=Color.negative,
-            description="### invalid `percentage` value\nthe value you set is invalid, please choose a different value. ;)",
-        )
-        neutral_disable = discord.Embed(
-            title="",
-            color=Color.lyellow,
-            description=f"### successfully disabled {role.mention}'s boost.",
-        )
-        success_replaced = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### successfully replaces!\nOLD: **{role_boost["percentage"]}%** (until {role_boost["expires"]})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})",
-        )
-        success_done = discord.Embed(
-            title="",
-            color=Color.lgreen,
-            description=f"### success\n{role.mention} now has a {percentage}% xp boost.\nit will expire {timestamp(expires,"R")}",
-        )
-        # neutral_infinite_already_exists = discord.Embed(
-        #     title="",
-        #     color=Color.lyellow,
-        #     description=f"### already exists\nOLD: **{role_boost["percentage"]}%** (until {timestamp(role_boost["expires"], "f")})\nNEW: **{percentage}%** (until {timestamp(expires, "f")})\nreplace?",
-        # )
-        # neutral_infinite_confirm = discord.Embed(
-        #     title="",
-        #     color=Color.lgreen,
-        #     description=f"### almost done!\nnow please confirm to apply the {role_boost["percentage"]}% global boost.\nwill not expire.",
-        # )
-
-        embeds = []
-        fail = False
-        # confirm = 1 if exists else 0
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
         if percentage == 0:
-            await ctx.reply(embed=neutral_disable)
+            await cur.execute("DELETE FROM role_boosts WHERE role_id = ?", (role.id,))
+            await con.commit()
+            await ctx.reply(
+                view=Message(
+                    "## removed successfully\nall previous boosts for this role have been removed",
+                    accent_color=Color.lgreen,
+                )
+            )
             return
-        if expires < time.time() and expires != -1:
-            fail = True
-            embeds.append(fail_invalid_timestamp)
-        if percentage > 999999999999:  # or percentage <= -1:
-            fail = True
-            embeds.append(fail_invalid_percentage)
-        if fail:
-            if len(embeds) == 1:
-                embeds.insert(0, fail_single)
-            else:
-                embeds.insert(0, fail_multiple)
-            await ctx.reply(embeds=embeds, mention_author=False)
+        if duration < time.time() and duration != -1:
+            await ctx.reply(
+                view=Message(
+                    "## invalid duration.\nplease make sure the expiry date is either a [valid unix timestamp](<https://www.unixtimestamp.com/>) or -1, for infinite duration",
+                    accent_color=Color.negative,
+                )
+            )
             return
-        if exists:
-            await ctx.reply(embed=success_replaced)
-            return
-        await ctx.reply(embed=success_done)
-        await set_guild_config_key(
-            ctx.guild.id, f"modules.level.boost.role.{role.id}.percentage", percentage
+
+        await cur.execute(
+            """INSERT OR REPLACE INTO role_boosts (role_id, percentage, expires)
+            VALUES (?, ?, ?)
+            """,
+            (role.id, percentage, duration),
         )
-        await set_guild_config_key(
-            ctx.guild.id, f"modules.level.boost.role.{role.id}.expires", expires
+        await con.commit()
+        await ctx.reply(
+            view=Message(
+                f"## applied successfully.\n{role.mention} now has a **{percentage}%** boost.\nit will expire {timestamp(duration)}",
+                accent_color=Color.lgreen,
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
-    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @level.command(name="get", description="Check your current level.")
+    @app_commands.checks.has_permissions(administrator=True)
+    @boost.command(name="user", description="set a boost to a user in this server")
+    @app_commands.describe(
+        percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
+        duration="a unix timestamp of the expiry date. leave empty for infinite",
+    )
+    async def boost_user(
+        self,
+        ctx: commands.Context,
+        user: discord.Member,
+        percentage: int,
+        duration: int = -1,
+    ):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        if percentage == 0:
+            await cur.execute(
+                "DELETE FROM user_boosts WHERE user_id = ? AND guild_id = ?",
+                (user.id, user.guild.id),
+            )
+            await con.commit()
+            await ctx.reply(
+                view=Message(
+                    "## removed successfully\nall previous boosts for this user have been removed",
+                    accent_color=Color.lgreen,
+                )
+            )
+            return
+        if duration < time.time() and duration != -1:
+            await ctx.reply(
+                view=Message(
+                    "## invalid duration.\nplease make sure the expiry date is either a [valid unix timestamp](<https://www.unixtimestamp.com/>) or -1, for infinite duration",
+                    accent_color=Color.negative,
+                )
+            )
+            return
+
+        await cur.execute(
+            """INSERT OR REPLACE INTO user_boosts (user_id, guild_id, percentage, expires)
+            VALUES (?, ?, ?, ?)
+            """,
+            (user.id, user.guild.id, percentage, duration),
+        )
+        await con.commit()
+        await ctx.reply(
+            view=Message(
+                f"## applied successfully.\n{user.mention} now has a **{percentage}%** boost.\nit will expire {timestamp(duration)}",
+                accent_color=Color.lgreen,
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @level.command(name="boosts", description="get your active boosts")
+    async def boosts(self, ctx: commands.Context, user: discord.Member = None):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        if not user:
+            user = ctx.author
+        boosts = await get_boosts(cur, ctx.guild, user)
+        await ctx.reply(
+            view=LevelBoosts(boosts), allowed_mentions=discord.AllowedMentions.none()
+        )
+
+    @level.command(name="get", description="check your current level")
     async def level_get(self, ctx: commands.Context, user: discord.Member = None):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
         if user is None:
             user = ctx.author
+        # data collection
+
+        xp_res = await cur.execute(
+            "SELECT xp FROM users WHERE guild_id=? and user_id=?",
+            (ctx.guild.id, user.id),
+        )
+        xp_row = await xp_res.fetchone()
+
+        xp = xp_row[0] if xp_row else 0
+        multiplier = await get_boosts(cur, ctx.guild, user)
+        level = xp_to_level(xp)
+        rank_res = await cur.execute(
+            "SELECT COUNT(*) FROM users WHERE guild_id=? AND xp > ?",
+            (ctx.guild.id, xp),
+        )
+        rank_row = await rank_res.fetchone()
+        place_in_leaderboard = rank_row[0] if rank_row else 1
+
+        # image
+        img = Image.new("RGB", (256, 256), color=(0, 0, 0))
+        d = ImageDraw.Draw(img)
+
+        font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 96)
+        font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
+        font_light = ImageFont.truetype("assets/ClashDisplay-Medium.ttf", 22)
+
+        avatar_asset = user.display_avatar.replace(size=32)
+        buffer = io.BytesIO(await avatar_asset.read())
+        avatar = Image.open(buffer).convert("RGBA").resize((32, 32))
+
+        mask = Image.new("L", (32, 32), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        mask_draw.ellipse((0, 0, 32, 32), fill=255)
+
+        avatar = ImageOps.fit(avatar, (32, 32))
+        avatar.putalpha(mask)
+
+        img.paste(avatar, (16, 16), avatar)
+        d.text((56, (16 + 4)), user.name, font=font, fill=(255, 255, 255), anchor="lt")
+
+        d.text(
+            (128, 128),
+            str(level),
+            font=font_bold,
+            fill=(255, 255, 255),
+            anchor="mm",
+        )
+        d.text(
+            (128, 210),
+            f"{xp}xp • #{place_in_leaderboard}",
+            font=font_light,
+            fill=(255, 255, 255),
+            anchor="mm",
+        )
+        if not os.path.exists("cache"):
+            os.makedirs("cache", exist_ok=True)
+        img_path = f"cache/{ctx.guild.id}_{ctx.author.id}_level.png"
+        img.save(img_path)
+        logger.debug(
+            f"{user.name} ({user.id}) has {xp}, which puts them at level {level}"
+        )
         try:
-            data = await get_guild_config(ctx.guild.id)
-            users = data.get("stats", {}).get("level", {}).get("users", {})
-            sorted_users = sorted(
-                users.items(), key=lambda x: x[1].get("xp", 0), reverse=True
-            )
-            place_in_leaderboard = next(
-                (
-                    i
-                    for i, (user_id, _) in enumerate(sorted_users, start=1)
-                    if user_id == str(user.id)
+            await ctx.reply(
+                content=(
+                    f"-# xp boost: **{multiplier["multiplier"]}%**!"
+                    if multiplier["multiplier"]
+                    else None
                 ),
-                None,
+                file=discord.File(img_path),
             )
-            xp = users.get(str(user.id), {}).get("xp", 0)
-            level = xp_to_level(xp)
-
-            img = Image.new("RGB", (256, 256), color=(0, 0, 0))
-            d = ImageDraw.Draw(img)
-
-            font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 96)
-            font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
-            font_light = ImageFont.truetype("assets/ClashDisplay-Medium.ttf", 22)
-
-            avatar_asset = user.display_avatar.replace(size=32)
-            buffer = io.BytesIO(await avatar_asset.read())
-            avatar = Image.open(buffer).convert("RGBA").resize((32, 32))
-
-            mask = Image.new("L", (32, 32), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            mask_draw.ellipse((0, 0, 32, 32), fill=255)
-
-            avatar = ImageOps.fit(avatar, (32, 32))
-            avatar.putalpha(mask)
-
-            img.paste(avatar, (16, 16), avatar)
-            d.text(
-                (56, (16 + 4)), user.name, font=font, fill=(255, 255, 255), anchor="lt"
-            )
-
-            d.text(
-                (128, 128),
-                str(level),
-                font=font_bold,
-                fill=(255, 255, 255),
-                anchor="mm",
-            )
-            d.text(
-                (128, 210),
-                f"{xp}xp • #{place_in_leaderboard}",
-                font=font_light,
-                fill=(255, 255, 255),
-                anchor="mm",
-            )
-            if not os.path.exists("cache"):
-                os.makedirs("cache", exist_ok=True)
-            img_path = f"cache/{ctx.guild.id}_{ctx.author.id}_level.png"
-            img.save(img_path)
-            guild_config = await get_guild_config(ctx.guild.id)
-            boosts: dict = (
-                guild_config.get("modules", {}).get("level", {}).get("boost", {})
-            )
-            global_boost: dict = boosts.get("global", {"percentage": 0, "expires": 0})
-            if global_boost.get("expires") < time.time():
-                global_boost_value = 0
-            else:
-                global_boost_value = global_boost.get("percentage")
-
-            role_boosts: dict = boosts.get("role", {})
-            user_boosts: dict = boosts.get("user", {})
-            highest_boost = global_boost_value
-            user_boost = user_boosts.get(str(user.id), {"expires": 0, "percentage": 0})
-            if user_boost["expires"] > time.time():
-                highest_boost = max(highest_boost, user_boost["percentage"])
-            for role in user.roles:
-                role_boost = role_boosts.get(
-                    str(role.id), {"expires": 0, "percentage": 0}
-                )
-                if role_boost["expires"] > time.time():
-                    highest_boost = max(highest_boost, role_boost["percentage"])
-            logger.debug(
-                f"{user.name} ({user.id}) has {xp}, which puts them at level {level}"
-            )
-            try:
-                await ctx.reply(
-                    content=(
-                        f"xp boost: **{highest_boost}%**!" if highest_boost else None
-                    ),
-                    file=discord.File(img_path),
-                )
-            finally:
-                if os.path.exists(img_path):
-                    os.remove(img_path)
-
-        except FileNotFoundError:
-            await ctx.reply(
-                "guild config not found. please report this to the administrators. (/settings init)"
-            )
-        except FileNotFoundError:
-            await ctx.reply(
-                "guild config not found. please report this to the administrators. (/settings init)"
-            )
+        finally:
+            if os.path.exists(img_path):
+                os.remove(img_path)
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @level.command(name="top", description="View the most active members of the server")
+    @level.command(name="top", description="view the most active members of the server")
     async def leveltop(self, ctx: commands.Context):
-        try:
-            data = await get_guild_config(ctx.guild.id)
-            users = data.get("stats", {}).get("level", {}).get("users", {})
-            sorted_users = sorted(
-                users.items(), key=lambda x: x[1].get("xp", 0), reverse=True
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        users_res = await cur.execute(
+            "SELECT user_id, xp FROM users WHERE guild_id=? ORDER BY xp DESC",
+            (ctx.guild.id,),
+        )
+        users = await users_res.fetchall()
+        img = Image.new("RGB", (1350, 1536), color=(0, 0, 0))
+        d = ImageDraw.Draw(img)
+
+        font = ImageFont.truetype("assets/ClashDisplay-Semibold.ttf", 72)
+        font_light = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 66)
+
+        valid_users = []
+        count = 0
+        for user_id, xp in users:
+            user = ctx.guild.get_member(int(user_id))
+            if user is not None and count < 10:
+                valid_users.append((user_id, xp))
+                count += 1
+
+        for i, (user_id, xp) in enumerate(valid_users[:10], start=1):
+            user = ctx.guild.get_member(int(user_id))
+            if user is None:
+                continue
+            level = xp_to_level(xp)
+
+            avatar_asset = user.display_avatar.replace(size=128)
+            buffer = io.BytesIO(await avatar_asset.read())
+            avatar = Image.open(buffer).convert("RGBA").resize((128, 128))
+            mask = Image.new("L", (128, 128), 0)
+            mask_draw = ImageDraw.Draw(mask)
+            mask_draw.ellipse((0, 0, 128, 128), fill=255)
+            avatar = ImageOps.fit(avatar, (128, 128))
+            avatar.putalpha(mask)
+            y_pos = 16 * 3 + (i - 1) * 48 * 3
+            img.paste(avatar, (16 * 3, y_pos), avatar)
+            bbox = d.textbbox((0, 0), f"{level} • {xp}xp", font=font_light)
+            text_height = bbox[3] - bbox[1]
+            text_y = y_pos + 128 // 2 - text_height // 2
+
+            d.text(
+                (1350 - 16 * 3, text_y),
+                f"{level} • {xp}xp",
+                font=font_light,
+                fill=(255, 255, 255),
+                anchor="rt",
             )
-            # Upscaled image size: 450*3 x 512*3 = 1350 x 1536
-            img = Image.new("RGB", (1350, 1536), color=(0, 0, 0))
-            d = ImageDraw.Draw(img)
+            bbox_name = d.textbbox((0, 0), "A", font=font)
+            text_height_name = bbox_name[3] - bbox_name[1]
+            text_y_name = y_pos + 128 // 2 - text_height_name // 2
 
-            font = ImageFont.truetype("assets/ClashDisplay-Semibold.ttf", 72)  # 24 * 3
-            font_light = ImageFont.truetype(
-                "assets/ClashDisplay-Regular.ttf", 66
-            )  # 22 * 3
-
-            valid_users = []
-            count = 0
-            for user_id, user_data in sorted_users:
-                user = ctx.guild.get_member(int(user_id))
-                if user is not None and count < 10:
-                    valid_users.append((user_id, user_data))
-                    count += 1
-
-            for i, (user_id, user_data) in enumerate(valid_users[:10], start=1):
-                user = ctx.guild.get_member(int(user_id))
-                if user is None:
-                    continue
-                xp = user_data.get("xp", 0)
-                level = xp_to_level(xp)
-
-                avatar_asset = user.display_avatar.replace(
-                    size=128
-                )  # valid power of 2 ≥ 96
-                buffer = io.BytesIO(await avatar_asset.read())
-                avatar = Image.open(buffer).convert("RGBA").resize((128, 128))
-
-                mask = Image.new("L", (128, 128), 0)
-                mask_draw = ImageDraw.Draw(mask)
-                mask_draw.ellipse((0, 0, 128, 128), fill=255)
-
-                avatar = ImageOps.fit(avatar, (128, 128))
-                avatar.putalpha(mask)
-
-                y_pos = 16 * 3 + (i - 1) * 48 * 3  # vertical spacing scaled by 3
-
-                img.paste(avatar, (16 * 3, y_pos), avatar)
-
-                # Calculate vertical centering for xp/level text
-                bbox = d.textbbox((0, 0), f"{level} • {xp}xp", font=font_light)
-                text_height = bbox[3] - bbox[1]
-                text_y = y_pos + 128 // 2 - text_height // 2
-
+            if len(user.name) < 13:
                 d.text(
-                    (1350 - 16 * 3, text_y),
-                    f"{level} • {xp}xp",
-                    font=font_light,
+                    (56 * 3 + 20, text_y_name),
+                    str(i) + ". " + user.name,
+                    font=font,
                     fill=(255, 255, 255),
-                    anchor="rt",
+                    anchor="lt",
+                )
+            else:
+                d.text(
+                    (56 * 3 + 20, text_y_name),
+                    str(i) + ". " + user.name[:12] + "...",
+                    font=font,
+                    fill=(255, 255, 255),
+                    anchor="lt",
                 )
 
-                # Calculate vertical centering for username text
-                bbox_name = d.textbbox((0, 0), "A", font=font)
-                text_height_name = bbox_name[3] - bbox_name[1]
-                text_y_name = y_pos + 128 // 2 - text_height_name // 2
+        img_path = f"data/guilds/{ctx.guild.id}_level_top.png"
+        img.save(img_path)
 
-                if len(user.name) < 13:
-                    d.text(
-                        (56 * 3 + 20, text_y_name),
-                        str(i) + ". " + user.name,
-                        font=font,
-                        fill=(255, 255, 255),
-                        anchor="lt",
-                    )
-                else:
-                    d.text(
-                        (56 * 3 + 20, text_y_name),
-                        str(i) + ". " + user.name[:12] + "...",
-                        font=font,
-                        fill=(255, 255, 255),
-                        anchor="lt",
-                    )
+        try:
+            await ctx.reply(file=discord.File(img_path))
 
-            img_path = f"data/guilds/{ctx.guild.id}_level_top.png"
-            img.save(img_path)
-
-            try:
-                await ctx.reply(file=discord.File(img_path))
-
-            finally:
-                if os.path.exists(img_path):
-                    os.remove(img_path)
-        except FileNotFoundError:
-            await ctx.reply(
-                "guild config not found. please report this to the administrators. (/settings init)"
-            )
+        finally:
+            if os.path.exists(img_path):
+                os.remove(img_path)
 
     @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @level.command(
-        name="set", description="set a user's xp. requires administrator permissions"
+        name="set",
+        description="set a user's xp. requires administrator permissions. add L to use levels instead",
     )
-    async def levelset(self, ctx: commands.Context, user: discord.User, xp: int):
+    async def levelset(self, ctx: commands.Context, xp: str, user: discord.User = None):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
         if user is None:
             user = ctx.author
-        await set_guild_config_key(ctx.guild.id, f"stats.level.users.{user.id}.xp", xp)
-        await set_guild_config_key(
-            ctx.guild.id, f"stats.level.users.{user.id}.xp", xp
-        )  # TODO this will also change in the new config system, im marking every new change of mine
-        await ctx.reply(f"set {user.name}'s XP to {xp}.", ephemeral=True)
+        if xp.isdigit():
+            xpr = int(xp)
+        elif xp.lower().endswith("l"):
+            xpr = level_to_xp(int(xp[:-1]))
+        else:
+            await ctx.reply(view=Message("## invalid level provided."))
+            return
+        logger.debug(f"attempting to set {user.id}'s xp to {xpr}")
+        await cur.execute(
+            "INSERT OR REPLACE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
+            (ctx.guild.id, user.id, int(xpr)),
+        )
+        await con.commit()
+        await ctx.reply(
+            view=Message(
+                f"## set {user.mention}'s xp to `{xpr}` (level `{xp_to_level(xpr)}`)."
+            ),
+            ephemeral=True,
+        )
+
+    @verify()
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @level.command(
+        name="add",
+        description="add xp to a user. Use L at the end to add levels instead.",
+    )
+    async def leveladd(self, ctx: commands.Context, xp: str, user: discord.User = None):
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+
+        if not ctx.author.guild_permissions.administrator:
+            await ctx.reply("You do not have permission to use this command.")
+            return
+
+        if user is None:
+            user = ctx.author
+        current_xp_res = await cur.execute(
+            "SELECT xp FROM users WHERE guild_id = ? AND user_id = ?",
+            (ctx.guild.id, user.id),
+        )
+        current_row = await current_xp_res.fetchone()
+        current_xp = current_row[0] if current_row else 0
+        if isinstance(xp, str) and xp.endswith("L"):
+            levels_to_add = int(xp[:-1])
+            xp_to_add = (
+                level_to_xp(level_to_xp(current_xp) + levels_to_add) - current_xp
+            )
+        else:
+            xp_to_add = int(xp)
+
+        new_xp = current_xp + xp_to_add
+
+        await cur.execute(
+            "INSERT OR REPLACE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
+            (ctx.guild.id, user.id, new_xp),
+        )
+        await con.commit()
+
+        await ctx.reply(
+            view=Message(
+                f"## added `{xp_to_add}` xp to {user.mention}. (level `{xp_to_level(new_xp)}`)"
+            ),
+            ephemeral=True,
+        )
 
     @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @level.command(
         name="refresh",
-        description="synchronizes all levels and grants role rewards. administrator only",
+        description="synchronizes all levels and grants role rewards. admin only",
     )
     async def levelrefresh(self, ctx: commands.Context):
-        start_time = time.time()
         if not ctx.author.guild_permissions.administrator:
-            await ctx.reply("you do not have permission to use this command.")
+            await ctx.reply("You do not have permission to use this command.")
             return
 
-        total_users = len(ctx.guild.members)
-        estimated_time = (total_users * 0.1) * 2
-        await ctx.reply(
-            f"levels/roles refresh started. the results will be sent soon. estimated time: {estimated_time:.1f} seconds.",
-            ephemeral=False,
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+
+        rewards_res = await cur.execute(
+            "SELECT level, reward_id FROM level_rewards WHERE guild_id=?",
+            (ctx.guild.id,),
         )
+        rewards = await rewards_res.fetchall()
+        rewards.sort(key=lambda x: x[0])
 
-        # data_path = f"data/guilds/{ctx.guild.id}.json"
-        try:
-            data = await get_guild_config(ctx.guild.id)
+        users_res = await cur.execute(
+            "SELECT user_id, xp FROM users WHERE guild_id=?", (ctx.guild.id,)
+        )
+        users = await users_res.fetchall()
+        user_xp_map = {int(user_id): xp for user_id, xp in users}
 
-            users = data.get("stats", {}).get("level", {}).get("users", {})
-            guild = ctx.guild
-            guild_config = await get_guild_config(guild.id)
-            affected_users = []
+        added_roles = {}
+        removed_roles = {}
 
-            for user_id, user_data in users.items():
-                user = guild.get_member(int(user_id))
-                if user is None:
-                    continue
-                xp = user_data.get("xp", 0)
-                level = xp_to_level(xp)
-                level_roles = guild_config["modules"]["level"]["rewards"]
-                for role_level, role_id in level_roles.items():
-                    role = guild.get_role(role_id)
-                    if role:
-                        if level >= int(role_level):
-                            if role not in user.roles:
-                                await user.add_roles(role)
-                                affected_users.append(
-                                    f"{user.mention} ({level} • {xp}xp) - added role <@&{role.id}>"
-                                )
-                        else:
-                            if role in user.roles:
-                                await user.remove_roles(role)
-                                affected_users.append(
-                                    f"{user.mention} ({level} • {xp}xp) - removed role <@&{role.id}>"
-                                )
+        for member in ctx.guild.members:
+            if member.bot:
+                continue
 
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            time_difference = elapsed_time - estimated_time
-            time_diff_sign = "+" if time_difference > 0 else "-"
+            xp = user_xp_map.get(member.id, 0)
+            user_level = xp_to_level(xp)
 
-            if not affected_users:
-                await ctx.reply("no changes were made.")
-                return
+            roles_to_add = [
+                role_id
+                for level_required, role_id in rewards
+                if user_level >= level_required
+            ]
 
-            chunks = split_embed_description(affected_users)
-            for i, chunk in enumerate(chunks):
-                embed = discord.Embed(
-                    description="## users affected:\n" + chunk, color=Color.white
-                )
-                if i == len(chunks) - 1:
-                    embed.title = "leveling refresh complete"
-                    embed.add_field(
-                        name="time elapsed",
-                        value=f"`{elapsed_time:.2f}s ({time_diff_sign}{abs(time_difference):.2f}s from estimate)`",
+            current_role_ids = {role.id for role in member.roles}
+            missing_roles = [
+                role_id for role_id in roles_to_add if role_id not in current_role_ids
+            ]
+
+            roles_to_remove = [
+                role_id
+                for level_required, role_id in rewards
+                if user_level < level_required and role_id in current_role_ids
+            ]
+
+            if missing_roles:
+                try:
+                    await member.add_roles(
+                        *[
+                            ctx.guild.get_role(rid)
+                            for rid in missing_roles
+                            if ctx.guild.get_role(rid) is not None
+                        ],
+                        reason="Level refresh sync",
                     )
-                await ctx.send(embed=embed)
+                    added_roles[member.id] = missing_roles
+                except Exception as e:
+                    self.logger.error(f"Failed to add roles to {member}: {e}")
 
-        except FileNotFoundError:
-            await ctx.reply(
-                "guild config not found. please report this to the administrators. (/settings init)"
-            )
+            if roles_to_remove:
+                try:
+                    await member.remove_roles(
+                        *[
+                            ctx.guild.get_role(rid)
+                            for rid in roles_to_remove
+                            if ctx.guild.get_role(rid) is not None
+                        ],
+                        reason="Level refresh sync",
+                    )
+                    removed_roles[member.id] = roles_to_remove
+                except Exception as e:
+                    self.logger.error(f"Failed to remove roles from {member}: {e}")
+
+        await ctx.reply(
+            view=LevelRefreshSummary(added_roles, removed_roles),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
 
 
 async def setup(bot):

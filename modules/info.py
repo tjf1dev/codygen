@@ -4,6 +4,10 @@ from discord.ext import commands
 from discord import app_commands
 from PIL import Image
 from io import BytesIO
+from ext.logger import logger
+from ext.views import UserInfo, ServerInfo
+from ext.utils import parse_commands
+from ext.ui_base import Message
 
 
 async def avg_color(url):
@@ -20,7 +24,10 @@ async def avg_color(url):
 class info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = "Get information about certain things"
+        self.description = "pretty self explanatory"
+
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     @commands.hybrid_group(
         name="info", description="get information about certain things"
@@ -28,47 +35,22 @@ class info(commands.Cog):
     async def info(self, ctx: commands.Context):
         pass
 
-    @info.command(name="user", description="view information about a user.")
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @info.command(name="user", description="view information about a user")
+    @app_commands.describe(user="user to check")
     async def user(
         self, ctx: commands.Context, user: discord.Member | discord.User = None
     ):
         if not user:
-            ref = ctx.message.reference
-            if ref:
-                user = ref.resolved.author
-            else:
-                user = ctx.author
-        if user.avatar:
-            avatar = f"[`avatar`]({user.avatar.url})"
-        else:
-            avatar = ""
-        if user.banner:
-            banner = f"[`   banner`](<{user.banner.url}>)"
-        else:
-            banner = ""
-        col = await avg_color(user.avatar.url) if user.avatar else (0, 0, 0)
-        e = discord.Embed(
-            description=f"# {user.mention}\n"
-            f"display name: `{user.display_name}`\n"
-            f"username: `{user.name}`\n"
-            f"id: `{user.id}`\n"
-            f"created: <t:{round(user.created_at.timestamp())}:R> (<t:{round(user.created_at.timestamp())}:D>)\n"
-            f"{avatar}"
-            + (" · " if user.banner else "")
-            + f"{banner}\n"
-            + (
-                f"\nroles: `{len(user.roles)}`\njoined: <t:{round(user.joined_at.timestamp())}:R> (<t:{round(user.joined_at.timestamp())}:D>)"
-                if isinstance(user, discord.Member)
-                else ""
-            ),
-            color=discord.Color.from_rgb(*col),
+            user = ctx.author
+        await ctx.reply(
+            view=UserInfo(user),
+            mention_author=False,
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
-        e.set_thumbnail(url=user.avatar.url if user.avatar else None)
-        await ctx.reply(embed=e, mention_author=False)
-
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @info.command(name="guild", description="view information about this server.")
+    @info.command(name="guild", description="view information about the current server")
     async def guild(self, ctx: commands.Context):
         guild = ctx.guild
         roles = await guild.fetch_roles()
@@ -93,28 +75,37 @@ class info(commands.Cog):
                 if c.type != discord.ChannelType.category:
                     other_channels.append(c)
 
-        e = discord.Embed(
-            description=f"# {guild.name}\n"
-            f"id: {guild.id}\n"
-            f"owner: {guild.owner.mention}\n"
-            f"roles: {len(roles)}\n"
-            f"created: <t:{round(guild.created_at.timestamp())}:R> (<t:{round(guild.created_at.timestamp())}:D>)\n"
-            f"[icon url](<{guild.icon.url}>)\n"
-            f"## channels\n"
-            f"total: {len(channels)}\n"
-            f"text: {len(text_channels)}\n"
-            f"voice: {len(voice_channels)}\n"
-            f"other: {len(other_channels)}\n\n"
-            f"## members\n"
-            f"total: {len(members)}\n"
-            f"bots: {len(bots)}\n"
-            f"users: {len(users)}",
-            color=discord.Color.from_rgb(
-                *await avg_color(guild.icon.url) if guild.icon else (0, 0, 0)
+        await ctx.reply(
+            view=ServerInfo(
+                guild,
+                roles,
+                channels,
+                text_channels,
+                voice_channels,
+                other_channels,
+                members,
+                bots,
+                users,
             ),
+            mention_author=False,
         )
-        e.set_thumbnail(url=guild.icon.url)
-        await ctx.reply(embed=e)
+
+    @commands.command(
+        name="commands", description="lists all commands from the custom api request"
+    )
+    async def command(self, ctx: commands.Context):
+        raw_commands = ctx.bot.full_commands
+        text = ""
+        cmds = parse_commands(raw_commands)
+        for cmd in cmds:
+            # text += f"type: {cmd["is_subcommand"]}"
+            if cmd["is_subcommand"] == 0:  # no
+                text += f"</{cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+            if cmd["is_subcommand"] == 1:  # yes
+                text += f"</{cmd["parent"]["name"]} {cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+            if cmd["is_subcommand"] == 2:  # sub-subcommand
+                text += f"</{cmd["parent"]["parent"]["name"]} {cmd["parent"]["name"]} {cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+        await ctx.reply(view=Message(text))
 
 
 async def setup(bot):

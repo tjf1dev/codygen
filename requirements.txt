@@ -1,5 +1,5 @@
 requests
-discord.py
+git+https://github.com/Rapptz/discord.py
 python-dotenv 
 quart
 aiofiles
@@ -9,3 +9,4 @@ colorama
 jishaku
 pillow
 python-dateutil
+aiosqlite

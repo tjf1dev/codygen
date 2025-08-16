@@ -198,6 +198,9 @@ class fm(commands.Cog):
             "Use your Last.fm integration to check what you're listening to."
         )
 
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
     async def fetch_now_playing(self, username, raw: bool = False):
         """Fetches the currently playing track, scrobble count, and track play count for a Last.fm user."""
         api_key = os.environ["LASTFM_API_KEY"]

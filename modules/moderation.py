@@ -9,6 +9,9 @@ class moderation(commands.Cog):
         self.bot = bot
         self.description = "commands to help you manage your community."
 
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
         name="moderation", description="commands to help you manage your community."
@@ -22,7 +25,9 @@ class moderation(commands.Cog):
 
     @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @moderation.command(name="viewbanned", description="View banned people.")
+    @moderation.command(
+        name="viewbanned", description="view the server's banned people"
+    )
     async def viewbanned(self, ctx: commands.Context):
         if ctx.author.guild_permissions.ban_members and ctx.author is not None:
             bans = [entry async for entry in ctx.guild.bans()]

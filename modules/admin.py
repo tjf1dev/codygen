@@ -126,7 +126,7 @@ class admin(commands.Cog):
         try:
             with open(f"data/guilds/{ctx.guild.id}.json", "r") as f:
                 data = json.load(f)
-                # tickets = data["stats"]["ticket"]
+                # tickets = data["stats"]["ticket"] 
                 data["stats"]["ticket"] = []
 
             with open(f"data/guilds/{ctx.guild.id}.json", "w") as f:

@@ -1,15 +1,9 @@
 from discord.ext import commands
 from discord import app_commands
-import json
+from ext.ui_base import Message
 import discord
-from main import (
-    Color,
-    get_prefix,
-    set_guild_config_key,
-    get_guild_config,
-    setup_guild,
-    logger,
-)
+from main import Color, get_prefix, setup_guild, logger
+import aiosqlite
 
 # enabling this allows using a prefixed command for /settings init
 no_app_force = False
@@ -59,6 +53,9 @@ class settings(commands.Cog):
         self.bot = bot
         self.description = "Settings commands to manage your bot instance."
 
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
     @commands.Cog.listener()
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
@@ -73,23 +70,15 @@ class settings(commands.Cog):
 
     @commands.has_guild_permissions(administrator=True)
     @settings.command(
-        name="config", description="View the configuration for your guild"
+        name="config", description="view the configuration for your server"
     )
     async def config(self, ctx: commands.Context):
-        config = await get_guild_config(ctx.guild.id)
-        path = f"data/guilds/{ctx.guild.id}.json"
-        config_patched = {k: v for k, v in config.items() if k != "stats"}
-        formatted_config = json.dumps(config_patched, indent=4)
-
-        embed = discord.Embed(
-            title="codygen's config",
-            description=(
-                f"path to your config file: `{path}`\n"
-                f"current config: ```json\n{formatted_config}```\nmodify it using commands in /settings."
+        await ctx.reply(
+            view=Message(
+                "due to data system migration, server configurations are currently disabled."
             ),
-            color=Color.white,
+            ephemeral=True,
         )
-        await ctx.reply(embed=embed, ephemeral=True)
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.has_guild_permissions(administrator=True)
@@ -107,9 +96,10 @@ class settings(commands.Cog):
                 )
                 return
         embed = discord.Embed(
-            title="", description="-# press the button below to start initialization."
+            title="",
+            description="initializing temporarily disabled due to data system changes",
         )
-        await ctx.reply(embed=embed, ephemeral=True, view=InitHomeView())
+        await ctx.reply(embed=embed, ephemeral=True)
 
     @commands.has_guild_permissions(administrator=True)
     @app_commands.describe(prefix="The new prefix to set")
@@ -118,33 +108,29 @@ class settings(commands.Cog):
     )
     async def prefix(self, ctx: commands.Context, prefix: str = None):
         old = await get_prefix(self.bot, ctx)
-
-        e = discord.Embed(
-            title="",
-            description="# prefix\n" f"the current prefix in this server is: `{old}`",
-            color=Color.white,
+        con: aiosqlite.Connection = self.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+        e = Message(
+            "# prefix\n" f"the current prefix in this server is: `{old}`",
+            accent_color=Color.white,
         )
-        fail = discord.Embed(
-            title="",
-            description="## something went wrong\ncodygen couldn't change your prefix. try again or contact us",
-            color=Color.negative,
-        )
-        e2 = discord.Embed(
-            title="",
-            description=f"# prefix\nprefix updated to: `{prefix}`",
-            color=Color.positive,
+        e2 = Message(
+            f"# prefix\nprefix updated to: `{prefix}`",
+            accent_color=Color.positive,
         )
 
         if not prefix:
-            await ctx.reply(embed=e, mention_author=False)
+            await ctx.reply(view=e, mention_author=False)
             return
 
-        c = await set_guild_config_key(ctx.guild.id, "prefix.prefix", prefix)
-
-        if not c:
-            await ctx.reply(embed=fail, mention_author=False)
+        await cur.execute(
+            "UPDATE guilds SET prefix = ? WHERE guild_id = ?", (prefix, ctx.guild.id)
+        )
+        if cur.rowcount == 0:
             return
-        await ctx.reply(embed=e2)
+
+        await con.commit()
+        await ctx.reply(view=e2)
 
 
 async def setup(bot):

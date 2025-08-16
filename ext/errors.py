@@ -16,4 +16,12 @@ class MissingEnvironmentVariable(CodygenError):
     pass
 
 
+class LastfmLoggedOutError(CodygenError):
+    pass
+
+
+class ModuleDisabledError(CodygenError):
+    pass
+
+
 # i will add more soon

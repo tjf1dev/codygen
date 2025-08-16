@@ -36,7 +36,7 @@ async def callback():
         except KeyError:
             # raise ext.errors.MisconfigurationError(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
             logger.error(
-                f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY"
+                "Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY"
             )
             output = {
                 "error": "Misconfigured bot configuration",

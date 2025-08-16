@@ -22,3 +22,9 @@ logs
 
 .mypy_cache
 .dmypy.json
+
+modules/tests.py
+*.db
+*.db.backup
+*.db-wal
+*.db-shm

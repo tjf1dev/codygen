@@ -1,1 +1,1 @@
-import ext.web
+import requests
