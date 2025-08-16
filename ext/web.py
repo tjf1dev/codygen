@@ -1,5 +1,16 @@
-import quart, os, aiofiles, aiohttp, hashlib, base64, json
+import quart
+import os
+import aiofiles
+import aiohttp
+import hashlib
+import base64
+import json
+from quart import render_template
+
 from ext.logger import logger
+
+# import ext.errors
+from main import ensure_env
 
 app = "codygen"
 
@@ -23,6 +34,7 @@ async def callback():
             api_key = os.environ["LASTFM_API_KEY"]
             secret = os.environ["LASTFM_SECRET"]
         except KeyError:
+            # raise ext.errors.MisconfigurationError(f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY")
             logger.error(
                 f"Misconfiguration of last.fm application configuration fields in .env file: LASTFM_SECRET and/or LASTFM_API_KEY"
             )
@@ -58,7 +70,7 @@ async def callback():
             logger.error(f"An error occured while trying to authenticate {uid}: {e}")
 
         if "session" in data:
-            return quart.render_template("success.html")
+            return await render_template("success.html")
         else:
             logger.error(f"Session key missing: {data}")
             return {"error": "Session key missing", "details": str(data)}
@@ -81,3 +93,7 @@ async def invite():
 @app.route("/")
 async def root():
     return {"status": "codygen is online"}
+
+
+ensure_env()
+app.run(port=os.getenv("WEB_PORT"))

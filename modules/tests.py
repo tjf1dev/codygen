@@ -1,6 +1,12 @@
 from discord.ext import commands
 from discord import Interaction
 from main import version
+<<<<<<< HEAD
+=======
+import random
+import aiosqlite
+from db import get_database_latency
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 # from discord import app_commands
 import discord
@@ -11,6 +17,10 @@ class tests(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = ""
+<<<<<<< HEAD
+=======
+        self.db: aiosqlite.Connection = bot.db
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
     class TestButton(discord.ui.Button):
         async def callback(self, interaction: Interaction):
@@ -74,10 +84,43 @@ class tests(commands.Cog):
             container.add_item(tests.TestSelectActionRow())
             container.add_item(tests.TestActionRow())
 
+<<<<<<< HEAD
     @commands.hybrid_command(name="v2", description="preview of components v2")
     async def v2(self, ctx: commands.Context):
         await ctx.reply(view=self.TestLayout())
 
+=======
+    @commands.command(name="v2", description="preview of components v2")
+    async def v2(self, ctx: commands.Context):
+        await ctx.reply(view=self.TestLayout())
+
+    @commands.command(name="levelup", description="test of the level up message")
+    async def levelup(self, ctx: commands.Context):
+        from ext.views import LevelupLayout
+
+        old_xp = random.randint(0, 1000)
+        xp = random.randint(old_xp, 1000)
+        place_in_leaderboard = random.randint(0, 100)
+        await ctx.reply(
+            view=LevelupLayout(ctx.author, old_xp, xp, place_in_leaderboard)
+        )
+        await ctx.send(
+            f"-# old_xp = {old_xp}, xp = {xp}, place in leaderboard = {place_in_leaderboard}"
+        )
+
+    @commands.is_owner()
+    @commands.command(name="db", description="get database connection")
+    async def db(self, ctx: commands.Context, *, sql: str = ""):
+        cur = await self.db.cursor()
+        tables = await cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        table_names = [t[0] for t in await tables.fetchall()]
+        content = f"`{await get_database_latency(self.bot.db):.3f}ms, {len(table_names)} tables loaded`"
+        msg = await ctx.reply(content)
+        if sql != "":
+            res = await cur.execute(sql)
+            await msg.edit(content=f"{content}\n```\n{await res.fetchall()}```")
+
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 async def setup(bot):
     await bot.add_cog(tests(bot))

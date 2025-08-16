@@ -5,6 +5,7 @@
 // tip: json does not like comments!
 {
     "version": "your-desired-version",
+    "github":"tjf1dev/codygen",
     "default_prefix":">"
     "admins": [
     ],
@@ -15,7 +16,7 @@
     },
     "commands": {
         "credits":{
-            "repo":"https://github.com/tjf1dev/codygen"
+            "repo":"tjf1dev/codygen"
         },
         "awawawa": {
             "words": [

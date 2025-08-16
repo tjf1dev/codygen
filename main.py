@@ -16,13 +16,16 @@ import asyncio
 import base64
 import sys
 import aiohttp
+import aiosqlite
 from discord.ext import commands
 from discord import app_commands
 from typing import AsyncGenerator, Optional, Dict, Any
 from colorama import Fore
 from ext.colors import Color
-from ext.logger import logger
-from ext.web import app
+from ext.logger import logger, ColorFormatter
+from db import connect, create_table
+
+# from ext.web import app
 
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
 
@@ -123,7 +126,7 @@ async def custom_api_request(
 
     async with aiohttp.ClientSession() as session:
         async with session.request(method.__name__, url, headers=headers) as response:
-            return await response.json()
+            return [response, await response.json()]
 
 
 async def request(
@@ -164,6 +167,34 @@ def get_required_env() -> list:
 
 
 REQUIRED_ENV = get_required_env()
+
+
+#! database stuff
+async def database() -> None:
+    """
+    Opens a connection to the database, and saves it onto the client
+    Checks if the database is present, and if it isnt, creates the database with tables.
+    """
+    logger.info("loading database")
+    con = await connect()
+    client.db = con
+    async with con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ) as cursor:
+        tables = await cursor.fetchall()
+        table_names = [t[0] for t in tables]
+    if not table_names:
+        logger.warning(
+            "seems like its your first time starting codygen! creating database file..."
+        )
+        logger.warning(
+            "if you want to convert your existing json data into a database, run db.py"
+        )
+        await con.close()
+        await create_table()
+        con = await connect()
+    for name in table_names:
+        logger.debug(f"loaded table {name}")
 
 
 def ensure_env():
@@ -220,6 +251,7 @@ tree = client.tree
 # client custom vars
 # these get passed to cogs
 client.color = Color
+client.version = version
 # load env
 dotenv.load_dotenv()
 TOKEN = os.getenv("BOT_TOKEN")  # bot token
@@ -583,7 +615,7 @@ client.start_time = time.time()
 
 @client.event
 async def on_ready():
-    logger.info("starting codygen")
+    await database()
     global start_time
     if getattr(client, "already_ready", False):
         return
@@ -599,15 +631,15 @@ async def on_ready():
             if cog_name in loaded_cogs:
                 logger.warning(f"skipping duplicate load of {cog_name}")
                 continue
-            elif cog_name in blacklist:
+            elif cog_name not in blacklist and cog_name != "admin":
                 logger.warning(f"skipping blacklisted module {cog_name}")
                 continue
             loaded_cogs.add(cog_name)
             try:
+                logger.debug(f"loading {cog_name}")
                 await client.load_extension(f"modules.{cog_name}")
             except asyncio.TimeoutError:
                 logger.error(f"timeout while loading {cog_name}")
-            logger.ok(f"loaded {cog_name}")
     logger.info(f"bot started as {Fore.LIGHTMAGENTA_EX}{client.user.name}{Fore.RESET}")
     admin_cog = client.get_cog("admin")
     admin_group = admin_cog.admin
@@ -681,4 +713,10 @@ async def on_ready():
 
 if __name__ == "__main__":
     ensure_env()
+<<<<<<< HEAD
     client.run(TOKEN)
+=======
+    #  asyncio.run(main())
+    logger.info("starting codygen")
+    client.run(TOKEN, root_logger=logger)
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af

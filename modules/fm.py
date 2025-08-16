@@ -12,6 +12,11 @@ from discord.ext import commands
 from discord import app_commands
 from main import Color, logger
 import aiofiles
+<<<<<<< HEAD
+=======
+from ext.ui_base import Message
+import ext.errors
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 
 async def get_average_color(url):
@@ -33,7 +38,11 @@ class fmSection(discord.ui.Section):
         super().__init__(accessory=accessory)
         display_text = (
             f"## [{track_info['track']}]({track_info['url']})\n"
+<<<<<<< HEAD
             f"{track_info['artist']} • {track_info['album']}\n"
+=======
+            f"{track_info['artist']} {"• " if track_info.get('album', None) else ""}{track_info.get('album', '')}\n"
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
             f"{track_info['track_scrobble_count']} scrobbles, "
             f"{track_info['scrobble_count']} total"
         )
@@ -71,7 +80,11 @@ class fmActionRow(discord.ui.ActionRow):
             self.voted_users[user_id] = "down"
             button.label = str(int(button.label) + 1)
 
+<<<<<<< HEAD
         await interaction.message.edit(view=self.view)
+=======
+        await interaction.edit_original_response(view=self.view)
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
     @discord.ui.button(
         style=discord.ButtonStyle.secondary,
@@ -87,6 +100,12 @@ class fmActionRow(discord.ui.ActionRow):
         current_vote = self.voted_users.get(user_id)
 
         if current_vote == "up":
+<<<<<<< HEAD
+=======
+            # if interaction.user.id == 978596696156147754:
+            #     button.label = str(int(button.label) + 100)
+            #     return
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
             self.voted_users.pop(user_id)
             button.label = str(int(button.label) - 1)
         elif current_vote == "down":
@@ -97,6 +116,7 @@ class fmActionRow(discord.ui.ActionRow):
             self.voted_users[user_id] = "up"
             button.label = str(int(button.label) + 1)
 
+<<<<<<< HEAD
         await interaction.message.edit(view=self.view)
 
 
@@ -105,36 +125,87 @@ class fmLayout(discord.ui.LayoutView):
         super().__init__()
         container = discord.ui.Container()
         container.add_item(fmSection(track_info))
+=======
+        await interaction.edit_original_response(view=self.view)
+
+
+class fmLayout(discord.ui.LayoutView):
+    def __init__(
+        self, interaction: discord.Interaction, track_info: dict, timeout=None
+    ):
+        super().__init__()
+        container = discord.ui.Container()
+        container.add_item(fmSection(track_info))
+        # if interaction.guild:
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
         container.add_item(fmActionRow(track_info))
         self.add_item(container)
 
 
+<<<<<<< HEAD
 class lastfmAuthView(discord.ui.View):
     @discord.ui.button(label="Login", style=discord.ButtonStyle.primary)
+=======
+class lastfmMessageWithLogin(discord.ui.LayoutView):
+    def __init__(self, message, **container_options):
+        super().__init__()
+        container = discord.ui.Container(**container_options)
+        self.add_item(container)
+        container.add_item(discord.ui.TextDisplay(message))
+        container.add_item(lastfmAuthPromptActionRow())
+
+
+class lastfmAuthPromptActionRow(discord.ui.ActionRow):
+    def __init__(self):
+        super().__init__()
+
+    @discord.ui.button(label="Login", style=discord.ButtonStyle.secondary)
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
     async def auth_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         try:
-            view = lastfmAuthFinal(interaction.user.id)
-            e = discord.Embed(
-                title="",
-                description=f"## last.fm authentication\npress the button below to safely authenticate with last.fm as {interaction.user.name}",
-                color=Color.accent_og,
-            )
-            await interaction.response.send_message(embed=e, view=view, ephemeral=True)
+            view = lastfmAuthFinal(interaction)
+            await interaction.response.send_message(view=view, ephemeral=True)
         except Exception as e:
             logger.error(f"{type(e)}: {e}")
 
 
-class lastfmAuthFinal(discord.ui.View):
-    def __init__(self, user_id):
-        super().__init__(timeout=None)
+class lastfmLoggedOutError(discord.ui.LayoutView):
+    def __init__(self):
+        super().__init__()
+
+        container = discord.ui.Container()
+        container.add_item(
+            discord.ui.TextDisplay("## Not logged in!\nAuthorize with the button below")
+        )
+        container.add_item(lastfmAuthPromptActionRow)
+        self.add_item()
+
+
+class lastfmAuthFinalActionRow(discord.ui.ActionRow):
+    def __init__(self, interaction: discord.Interaction):
+        super().__init__()
+
         self.add_item(
             discord.ui.Button(
                 label="Authenticate",
-                url=f"https://www.last.fm/api/auth?api_key={os.environ['LASTFM_API_KEY']}&cb={os.environ['LASTFM_CALLBACK_URL']}?state={generate_full_state(user_id)}",
+                url=f"https://www.last.fm/api/auth?api_key={os.environ['LASTFM_API_KEY']}&cb={os.environ['LASTFM_CALLBACK_URL']}?state={generate_full_state(interaction.user.id)}",
             )
         )
+
+
+class lastfmAuthFinal(discord.ui.LayoutView):
+    def __init__(self, interaction: discord.Interaction):
+        super().__init__(timeout=None)
+        container = discord.ui.Container()
+        container.add_item(
+            discord.ui.TextDisplay(
+                f"## last.fm authentication\npress the button below to safely authenticate with last.fm as {interaction.user.name}"
+            )
+        )
+        container.add_item(lastfmAuthFinalActionRow(interaction))
+        self.add_item(container)
 
 
 def generate_full_state(user_id: int) -> str:
@@ -269,6 +340,45 @@ class fm(commands.Cog):
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
+    @lastfm.command(
+        name="logout",
+        description="remove your last.fm data from the bot",
+        with_app_command=True,
+    )
+    async def logout(self, ctx: commands.Context):
+        user_file = "data/last.fm/users.json"
+        try:
+            async with aiofiles.open(user_file, "r") as f:
+                content = await f.read()
+            data = json.loads(content)
+        except FileNotFoundError:
+            await ctx.reply(
+                view=Message("## you are not logged in with last.fm."), ephemeral=True
+            )
+
+            return
+
+        user_id_str = str(ctx.author.id)
+        if user_id_str not in data:
+            await ctx.reply(
+                view=lastfmMessageWithLogin("## you are not logged in with last.fm."),
+                ephemeral=True,
+            )
+            return
+
+        data.pop(user_id_str)
+        async with aiofiles.open(user_file, "w") as f:
+            await f.write(json.dumps(data, indent=4))
+
+        await ctx.reply(
+            view=Message(
+                "## your last.fm data has been removed successfully.\nyou can log back in anytime"
+            ),
+            ephemeral=True,
+        )
+
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
     @commands.hybrid_command(
         name="fm", description="see what you're listening to.", with_app_command=True
     )
@@ -280,8 +390,20 @@ class fm(commands.Cog):
                 username = (
                     data.get(str(ctx.author.id), {}).get("session", {}).get("name", {})
                 )
+                if not username:
+                    await ctx.reply(
+                        view=lastfmMessageWithLogin(
+                            "## Not logged in!\nuse the button below to authenticate with last.fm",
+                            accent_color=Color.negative,
+                        ),
+                        ephemeral=True,
+                    )
+                    return
             track_info_raw = await self.fetch_now_playing(username)
-            track_info = track_info_raw[0]
+            if not track_info_raw:
+                raise ext.errors.LastfmLoggedOutError()
+            else:
+                track_info = track_info_raw[0]
             # Create embed with track scrobble count
             # e = discord.Embed(
             #     description=f"## [{track_info['track']}]({track_info['url']})\n### by {track_info['artist']}, on {track_info['album']}\n{track_info['track_scrobble_count']} scrobbles • {track_info['scrobble_count']} total",
@@ -289,23 +411,33 @@ class fm(commands.Cog):
             # )
             # e.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar.url)
 
+<<<<<<< HEAD
             await ctx.reply(view=fmLayout(track_info), mention_author=False)
         except FileNotFoundError:
             e = discord.Embed(
                 title="Not logged in!",
                 description="Please use the button below to authenticate with Last.fm",
                 color=Color.negative,
+=======
+            await ctx.reply(
+                view=fmLayout(ctx.interaction, track_info), mention_author=False
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
             )
-            view = lastfmAuthView()
-            await ctx.reply(embed=e, view=view, ephemeral=True)
+            # if ctx.guild is None:
+            #     msg = await ctx.interaction.original_response()
+            #     await msg.add_reaction("<:upvote:1388512426059759657>")
+            #     await msg.add_reaction("<:downvote:1388512428484198482>")
+        except FileNotFoundError:
+            view = lastfmMessageWithLogin(
+                "## Not logged in!\nPlease use the button below to authenticate with Last.fm"
+            )
+            await ctx.reply(view=view, ephemeral=True)
         except Exception as err:
-            e = discord.Embed(
-                title="An error has occured!",
-                description="Please report this to the bot developers. you can also try authenticating again",
-                color=Color.negative,
-            ).add_field(name=f"{type(err).__name__}", value=str(err))
-            view = lastfmAuthView()
-            await ctx.reply(embed=e, view=view, ephemeral=True)
+            view = lastfmMessageWithLogin(
+                f"## An error occured!\nPlease report this to the bot developers. you can also try authenticating again\n```{type(err).__name__}: {str(err)}```",
+                accent_colour=Color.negative,
+            )
+            await ctx.reply(view=view, ephemeral=True)
 
 
 async def setup(bot):

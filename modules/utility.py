@@ -13,6 +13,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from PIL import Image
 from io import BytesIO
+<<<<<<< HEAD
+=======
+from ext.ui_base import Message
+import ext.views
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 
 async def image_url_to_gif(url: str) -> str:
@@ -492,7 +497,13 @@ class utility(commands.Cog):
         await ctx.reply(embed=embed, view=HelpHomeView(self.bot), ephemeral=True)
 
     @verify()
+<<<<<<< HEAD
     @commands.hybrid_command(name="add", description="shows useful info about the bot")
+=======
+    @commands.hybrid_command(
+        name="add", description="lets you add codygen to your server or profile"
+    )
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
     async def add(self, ctx: commands.Context):
         bid = os.getenv("APP_ID")
         guild = f"https://discord.com/oauth2/authorize?client_id={bid}&permissions=8&scope=applications.commands+bot"
@@ -500,14 +511,55 @@ class utility(commands.Cog):
         e = discord.Embed(
             description="# add codygen\n"
             f"## [server]({guild})\n"
-            "use the link above to invite codygen to your server. this is the regular way of adding bots\n"
+            "use the link above to invite codygen to your server.\n"
             f"## [user install]({user})\n"
-            "use this link to install codygen to your user. you will be able to use it's commands anywhere\n\n"
+            "use this link to install codygen to your profile. you will be able to use it's commands anywhere\n\n"
             f"-# [about codygen](https://github.com/tjf1dev/codygen)",
             color=Color.accent,
         )
         await ctx.reply(embed=e, ephemeral=False)
 
+<<<<<<< HEAD
+=======
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @commands.hybrid_command(
+        name="changelog",
+        description="view recent updates to codygen",
+    )
+    async def changelog(self, ctx: commands.Context):
+        repo: str = get_global_config().get("github", "")
+        if not len(repo.split("/")) == 2:
+            raise ext.errors.MisconfigurationError(
+                f"github: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split("/")}"
+            )
+        api_url = f"https://api.github.com/repos/{repo}/commits"
+        if self.bot.version.endswith("alpha"):
+            api_url += "?sha=alpha"
+        headers = {}
+        token = os.getenv("GITHUB_PAT")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.get(api_url, headers=headers) as res:
+                    if res.status != 200:
+                        text = await res.text()
+                        raise ext.errors.DefaultError(f"HTTP {res.status}: {text}")
+                    data = await res.json()
+            except aiohttp.ClientConnectionError as e:
+                raise ext.errors.DefaultError(
+                    f"connection closed while reading json: {e}"
+                )
+            except aiohttp.ContentTypeError:
+                text = await res.text()
+                raise ext.errors.DefaultError(f"response is not json: {text}")
+            except Exception as e:
+                raise ext.errors.DefaultError(f"unexpected error parsing json: {e}")
+        await ctx.reply(view=ext.views.ChangelogLayout(self.bot, data))
+
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
     @commands.hybrid_command(
@@ -515,10 +567,21 @@ class utility(commands.Cog):
         description="view detailed information about codygen, including contributors, etc.",
     )
     async def about(self, ctx: commands.Context):
+<<<<<<< HEAD
         repo: str = get_global_config()["commands"].get("about", {"repo": ""})["repo"]
+=======
+        repo: str = get_global_config().get("github", "")
+        if not repo:
+            logger.warning(
+                "github repository path has changed from commands.about.repo to github (at root of config). please update this, the old functionality will be removed in a future update"
+            )
+            repo: str = get_global_config()["commands"].get("about", {"repo": ""})[
+                "repo"
+            ]
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
         if not len(repo.split("/")) == 2:
             raise ext.errors.MisconfigurationError(
-                f"commands > about > repo: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split("/")}"
+                f"github: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split("/")}"
             )
         api_url = f"https://api.github.com/repos/{repo}/contributors"
         headers = {}
@@ -545,6 +608,7 @@ class utility(commands.Cog):
 
         contributors = ""
         for c in data:
+<<<<<<< HEAD
             contributors += f"[`{c["login"]}`](<{c["html_url"]}>): {c["contributions"]} contributions\n"
 
         e = discord.Embed(
@@ -560,6 +624,11 @@ thank you to **EVERYONE** (yes, you too) for making, contributing to, using cody
             color=Color.accent,
         )
         await ctx.reply(embed=e)
+=======
+            co = c["contributions"]
+            contributors += f"[`{c["login"]}`](<{c["html_url"]}>): {co} contribution{"s" if co > 1 else ""}\n"
+        await ctx.reply(view=ext.views.AboutLayout(self.bot, contributors))
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
     # now some exclusives i need for my server
     # guild id will be hardcoded

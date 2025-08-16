@@ -25,9 +25,10 @@ class applications(commands.Cog):
         description="View the server's application form. This category is still in development",
     )
     async def view_form(self, ctx: commands.Context):
-        req = await custom_api_request(
+        raw = await custom_api_request(
             self.bot, f"/guilds/{ctx.guild.id}/member-verification", auth=True
         )
+        req, json = raw[0], raw[1]
         if not req.ok:
             fail = discord.Embed(
                 title="failed to fetch information.",
@@ -36,7 +37,7 @@ class applications(commands.Cog):
             )
             await ctx.reply(embed=fail)
             return
-        form = req.json()
+        form = json
         dt = parser.isoparse(form["version"])
         udt = int(dt.timestamp())
         e1 = discord.Embed(title="about", color=0x00CCFF)

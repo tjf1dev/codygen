@@ -1,4 +1,6 @@
-import logging, os, datetime
+import logging
+import os
+import datetime
 from colorama import Fore
 
 
@@ -50,12 +52,8 @@ file_formatter = logging.Formatter(
     datefmt="%d/%m/%Y %H:%M:%S",
 )
 discord_logger = logging.getLogger("discord")
-discord_logger.setLevel(logging.CRITICAL)
-
-for h in discord_logger.handlers:
-    discord_logger.removeHandler(h)
-
-logging.getLogger("discord.http").setLevel(logging.CRITICAL)
+discord_logger.setLevel(logging.INFO)
+logging.getLogger("discord.http").setLevel(logging.INFO)
 colorless_formatter = "%(asctime)s [ %(levelname)s ] %(funcName)s: %(message)s"
 # file logging
 if not os.path.exists("logs"):
