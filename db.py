@@ -12,7 +12,8 @@ config_ver = 1002
 
 async def create_table():
     async with aiosqlite.connect(DB_FILE) as con:
-        await con.execute("""CREATE TABLE IF NOT EXISTS guilds (
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS guilds (
                 guild_id INTEGER PRIMARY KEY,
                 prefix TEXT DEFAULT '>',
                 prefix_enabled BOOLEAN DEFAULT 1,
@@ -20,43 +21,57 @@ async def create_table():
                 levelup_channel INTEGER,
                 config_ver INTEGER DEFAULT 1002,
                 timestamp REAL
-            )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS guild_commands (
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS guild_commands (
                 guild_id INTEGER PRIMARY KEY,
                 wokemeter_min INTEGER DEFAULT 0,
                 wokemeter_max INTEGER DEFAULT 100
-            )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS global_boosts (
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS global_boosts (
                 guild_id INTEGER PRIMARY KEY,
                 percentage INTEGER,
                 expires REAL
-            )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS role_boosts (
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS role_boosts (
                 role_id INTEGER PRIMARY KEY,
                 percentage INTEGER,
                 expires REAL
-            )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS user_boosts (
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS user_boosts (
                     user_id INTEGER,
                     guild_id INTEGER,
                     percentage INTEGER,
                     expires REAL,
                     PRIMARY KEY (user_id, guild_id)
-                )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS level_rewards (
+                )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS level_rewards (
                 guild_id INTEGER,
                 level INTEGER,
                 reward_id INTEGER,
                 PRIMARY KEY (guild_id, level, reward_id)
             );
-            """)
-        await con.execute("""CREATE TABLE IF NOT EXISTS users (
+            """
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS users (
                 guild_id INTEGER,
                 user_id INTEGER,
                 xp INTEGER NOT NULL,
                 PRIMARY KEY (guild_id, user_id)
-            )""")
-        await con.execute("""CREATE TABLE IF NOT EXISTS modules (
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS modules (
                 guild_id INTEGER PRIMARY KEY,
                 admin BOOLEAN DEFAULT 1,
                 applications BOOLEAN DEFAULT 1,
@@ -69,7 +84,8 @@ async def create_table():
                 moderation BOOLEAN DEFAULT 1,
                 settings BOOLEAN DEFAULT 1,
                 utility BOOLEAN DEFAULT 1
-            )""")
+            )"""
+        )
         print("created (missing?) tables")
         await con.commit()
 
@@ -185,8 +201,9 @@ async def user_tests():
         (1333785291584180244,),
     )
     print(await rewards_res.fetchall())
-    users_res = await cur.execute("SELECT user_id, xp FROM users WHERE guild_id=?",
-                                  (1333785291584180244,))
+    users_res = await cur.execute(
+        "SELECT user_id, xp FROM users WHERE guild_id=?", (1333785291584180244,)
+    )
     users = await users_res.fetchall()
     print(users)
 

@@ -1,11 +1,12 @@
+from typing import Any
 from discord.ui import LayoutView, Container, TextDisplay
 
-# import discord
+# from discord import Colour
 
 
 class Message(LayoutView):
-    def __init__(self, message, **container_settings: dict):
+    def __init__(self, message: str, color: Any = None, **container_settings: Any):
         super().__init__()
-        container = Container(**container_settings)
+        container = Container(accent_color=color, **container_settings)
         self.add_item(container)
         container.add_item(TextDisplay(message))

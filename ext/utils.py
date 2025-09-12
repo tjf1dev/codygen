@@ -1,11 +1,22 @@
+import base64
 import datetime
 import aiohttp
 from ext.logger import logger
 
+import discord
+from typing import AsyncGenerator
+from ext.colors import Color
+import asyncio
 
-def parse_commands(commands, bot=None) -> dict:
+
+def state_to_id(state: str) -> str:
+    euid = state.split("@")[0]
+    return base64.b64decode(euid).decode()
+
+
+def parse_commands(commands, bot=None) -> list[dict]:
     """
-    Formats commands into a nice dict
+    Formats commands into a nice list
     Disregards groups, context menus
     Optionally adds cog information if bot is provided
     """
@@ -17,7 +28,6 @@ def parse_commands(commands, bot=None) -> dict:
 
     valid_cmds = []
 
-    # If bot is provided, create lookup dictionary for cog information
     dpy_command_lookup = {}
     if bot:
         for cog_name, cog in bot.cogs.items():
@@ -62,7 +72,7 @@ def parse_commands(commands, bot=None) -> dict:
                 if option["type"] == 1:
                     subcommand_data = {
                         "name": option["name"],
-                        "full_name": f"{cmd["name"]} {option["name"]}",
+                        "full_name": f"{cmd['name']} {option['name']}",
                         "parent": {"name": cmd["name"]},
                         "command": option,
                         "id": cmd["id"],
@@ -82,7 +92,7 @@ def parse_commands(commands, bot=None) -> dict:
                             option_parent = cmd["name"]
                             sub_sub_data = {
                                 "name": sub_option["name"],
-                                "full_name": f"{option_parent} {sub_option_parent} {sub_option["name"]}",
+                                "full_name": f"{option_parent} {sub_option_parent} {sub_option['name']}",
                                 "parent": {
                                     "name": sub_option_parent,
                                     "parent": {"name": option_parent},
@@ -111,7 +121,9 @@ def parse_commands(commands, bot=None) -> dict:
     return valid_cmds
 
 
-async def get_command(token: str, client_id: str, id: int = 0, name: str = "") -> dict:
+async def get_command(
+    token: str, client_id: str | int, id: int = 0, name: str = ""
+) -> dict | list[dict]:
     """
     gets information about a command by name or id
     one of those is required
@@ -124,12 +136,12 @@ async def get_command(token: str, client_id: str, id: int = 0, name: str = "") -
     try:
         if not name and not id:
             logger.error("either name or id is required")
-            return
+            return {}
         async with aiohttp.ClientSession(headers=headers) as session:
             async with session.get(url) as resp:
                 data: list = await resp.json()
         if name == "*":
-            logger.info("command list downloaded")
+            logger.debug("command list downloaded")
             return data
 
         for command in data:
@@ -155,7 +167,7 @@ def iso_to_unix(iso_str: str) -> int:
     if iso_str.endswith("Z"):
         iso_str = iso_str.replace("Z", "+00:00")
 
-    dt = datetime.fromisoformat(iso_str)
+    dt = datetime.datetime.fromisoformat(iso_str)
     return int(dt.timestamp())
 
 
@@ -192,7 +204,7 @@ def level_to_xp(level: int, base_xp: float = 50, exponent: float = 1.24) -> int:
     return round(total_xp)
 
 
-def xp_to_level(xp: int, base_xp: float = 50, exponent: float = 1.24) -> int:
+def xp_to_level(xp: int | float, base_xp: float = 50, exponent: float = 1.24) -> int:
     level = 1
     while True:
         cost = adjusted_xp_cost(level, base_xp, exponent)
@@ -274,3 +286,27 @@ def map_custom_commands_to_cogs(bot):
             mapped_commands.append(mapped_cmd)
 
     return mapped_commands
+
+
+def parse_flags(s: str) -> dict[str, str | bool]:
+    parts = s.split()
+    flags: dict[str, str | bool] = {}
+    i = 0
+    while i < len(parts):
+        t = parts[i]
+        if t.startswith("--"):
+            key = t[2:]
+            value = True
+            if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
+                value = parts[i + 1]
+                i += 1
+            flags[key] = value
+        elif t.startswith("-"):
+            key = t[1:]
+            value = True
+            if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
+                value = parts[i + 1]
+                i += 1
+            flags[key] = value
+        i += 1
+    return flags

@@ -12,6 +12,8 @@ import aiosqlite
 from ext.ui_base import Message
 from ext.views import LevelRefreshSummary, LevelBoosts
 from ext.colors import Color
+from typing import Any
+from models import Codygen
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -128,6 +130,8 @@ async def send_levelup(
     new_xp,
     highest_boost: int,
     cur: aiosqlite.Cursor,
+    old_level: int,
+    new_level: int,
 ):
     """
     Sends a levelup message to the channel configured in the guild config.
@@ -145,17 +149,27 @@ async def send_levelup(
         "SELECT levelup_channel FROM guilds WHERE guild_id=?", (guild.id,)
     )
     cid_row = await cid_res.fetchone()
+    if not cid_row:
+        return
     channel_id = cid_row[0]
     if not channel_id:
         return
-    channel: discord.TextChannel = await guild.fetch_channel(channel_id)
+    channel_before = guild.get_channel(channel_id)
+    channel: discord.TextChannel | Any = (
+        channel_before if channel_before else await guild.fetch_channel(channel_id)
+    )
     # logger.debug(f"levelup channel: {channel_id}")
     if not channel:
         return
     # old_level = xp_to_level(xp - int(new_xp))
     # new_level = xp_to_level(xp)
     view = LevelupLayout(
-        user, xp - int(new_xp), new_xp, place_in_leaderboard, highest_boost
+        user,
+        xp,
+        place_in_leaderboard,
+        highest_boost,
+        old_level,
+        new_level,
     )
     await channel.send(view=view)
 
@@ -200,15 +214,15 @@ async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connecti
     new_level = xp_to_level(new_xp)
     if new_level > level:
         logger.debug(f"{user.id} leveled up from {level} {xp} to {new_level} {new_xp}")
-        await send_levelup(user, guild, xp, new_xp, multiplier, cur)
+        await send_levelup(user, guild, xp, new_xp, multiplier, cur, level, new_level)
     await con.commit()
     # logger.debug(f"added {add}xp to {user.id}. this puts them at level {xp_to_level(new_xp)}, with {new_xp}xp.")
 
 
 class level(commands.Cog):
     def __init__(self, bot):
-        self.bot = bot
-        self.description = "Track and reward users for activity"
+        self.bot: Codygen = bot
+        self.description = "track and reward users for activity"
         self.db: aiosqlite.Connection = bot.db
 
     @commands.Cog.listener("on_message")
@@ -249,6 +263,8 @@ class level(commands.Cog):
         self, ctx: commands.Context, percentage: int, duration: int = -1
     ):
         con: aiosqlite.Connection = ctx.bot.db
+        if not ctx.guild:
+            return
         cur: aiosqlite.Cursor = await con.cursor()
         if percentage == 0:
             await cur.execute(
@@ -388,22 +404,32 @@ class level(commands.Cog):
         )
 
     @level.command(name="boosts", description="get your active boosts")
-    async def boosts(self, ctx: commands.Context, user: discord.Member = None):
+    async def boosts(self, ctx: commands.Context, user: discord.Member | None = None):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
+        if not ctx.guild:
+            return
         if not user:
-            user = ctx.author
+            user = ctx.guild.get_member(ctx.author.id)
+            if not user:
+                user = await ctx.guild.fetch_member(ctx.author.id)
         boosts = await get_boosts(cur, ctx.guild, user)
         await ctx.reply(
             view=LevelBoosts(boosts), allowed_mentions=discord.AllowedMentions.none()
         )
 
     @level.command(name="get", description="check your current level")
-    async def level_get(self, ctx: commands.Context, user: discord.Member = None):
+    async def level_get(
+        self, ctx: commands.Context, user: discord.Member | None = None
+    ):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
-        if user is None:
-            user = ctx.author
+        if not ctx.guild:
+            return
+        if not user:
+            user = ctx.guild.get_member(ctx.author.id)
+            if not user:
+                user = await ctx.guild.fetch_member(ctx.author.id)
         # data collection
 
         xp_res = await cur.execute(
@@ -468,7 +494,7 @@ class level(commands.Cog):
         try:
             await ctx.reply(
                 content=(
-                    f"-# xp boost: **{multiplier["multiplier"]}%**!"
+                    f"-# xp boost: **{multiplier['multiplier']}%**!"
                     if multiplier["multiplier"]
                     else None
                 ),
@@ -483,6 +509,8 @@ class level(commands.Cog):
     async def leveltop(self, ctx: commands.Context):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
+        if not ctx.guild:
+            return
         users_res = await cur.execute(
             "SELECT user_id, xp FROM users WHERE guild_id=? ORDER BY xp DESC",
             (ctx.guild.id,),
@@ -566,9 +594,13 @@ class level(commands.Cog):
         name="set",
         description="set a user's xp. requires administrator permissions. add L to use levels instead",
     )
-    async def levelset(self, ctx: commands.Context, xp: str, user: discord.User = None):
+    async def levelset(
+        self, ctx: commands.Context, xp: str, user: discord.Member | None = None
+    ):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
@@ -600,10 +632,13 @@ class level(commands.Cog):
         name="add",
         description="add xp to a user. Use L at the end to add levels instead.",
     )
-    async def leveladd(self, ctx: commands.Context, xp: str, user: discord.User = None):
+    async def leveladd(
+        self, ctx: commands.Context, xp: str, user: discord.Member | None = None
+    ):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
-
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
@@ -646,6 +681,8 @@ class level(commands.Cog):
         description="synchronizes all levels and grants role rewards. admin only",
     )
     async def levelrefresh(self, ctx: commands.Context):
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
         if not ctx.author.guild_permissions.administrator:
             await ctx.reply("You do not have permission to use this command.")
             return
@@ -658,7 +695,7 @@ class level(commands.Cog):
             (ctx.guild.id,),
         )
         rewards = await rewards_res.fetchall()
-        rewards.sort(key=lambda x: x[0])
+        list(rewards).sort(key=lambda x: x[0])
 
         users_res = await cur.execute(
             "SELECT user_id, xp FROM users WHERE guild_id=?", (ctx.guild.id,)
@@ -695,31 +732,31 @@ class level(commands.Cog):
 
             if missing_roles:
                 try:
-                    await member.add_roles(
-                        *[
-                            ctx.guild.get_role(rid)
-                            for rid in missing_roles
-                            if ctx.guild.get_role(rid) is not None
-                        ],
-                        reason="Level refresh sync",
-                    )
+                    roles_to_add = [
+                        role
+                        for rid in missing_roles
+                        if (role := ctx.guild.get_role(rid)) is not None
+                    ]
+
+                    await member.add_roles(*roles_to_add, reason="Level refresh sync")
                     added_roles[member.id] = missing_roles
                 except Exception as e:
-                    self.logger.error(f"Failed to add roles to {member}: {e}")
+                    self.bot.log.error(f"Failed to add roles to {member}: {e}")
 
             if roles_to_remove:
                 try:
+                    roles_to_remove_objs = [
+                        role
+                        for rid in roles_to_remove
+                        if (role := ctx.guild.get_role(rid)) is not None
+                    ]
+
                     await member.remove_roles(
-                        *[
-                            ctx.guild.get_role(rid)
-                            for rid in roles_to_remove
-                            if ctx.guild.get_role(rid) is not None
-                        ],
-                        reason="Level refresh sync",
+                        *roles_to_remove_objs, reason="Level refresh sync"
                     )
                     removed_roles[member.id] = roles_to_remove
                 except Exception as e:
-                    self.logger.error(f"Failed to remove roles from {member}: {e}")
+                    self.bot.log.error(f"Failed to remove roles from {member}: {e}")
 
         await ctx.reply(
             view=LevelRefreshSummary(added_roles, removed_roles),

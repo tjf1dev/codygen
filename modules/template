@@ -1,14 +1,19 @@
 from discord.ext import commands
-from discord import app_commands
-# from main import logger, Color, verify
+from ext.logger import logger
+
+
 class NAME(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = ""
-    @app_commands.allowed_contexts(guilds=True,dms=False,private_channels=False)
-    @commands.hybrid_group(name="NAME",description="")
-    async def NAME(self,ctx: commands.Context):
+
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
+    @commands.hybrid_group(name="NAME", description="")
+    async def NAME(self, ctx: commands.Context):
         pass
+
 
 async def setup(bot):
     await bot.add_cog(NAME(bot))

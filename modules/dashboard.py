@@ -1,20 +1,17 @@
-from discord.ext import commands, ipcx
-import discord
-from ext.logger import logger
 import aiosqlite
 import functools
+import os
+import traceback
+import sys
+import discord
+from discord.ext import commands, ipcx
+from ext.logger import logger
 from discord import Permissions
 from dataclasses import dataclass
-import os
 from ext.utils import parse_commands
 from discord.abc import GuildChannel
-from discord import (
-    CategoryChannel,
-    TextChannel,
-    VoiceChannel,
-    StageChannel,
-    ForumChannel,
-)
+from models import Codygen
+from typing import cast, Any
 
 
 class ChannelSerializer:
@@ -31,9 +28,7 @@ class ChannelSerializer:
                 if getattr(channel, "category_id", None)
                 else None
             ),
-            "parent_id": (
-                str(channel.category.id) if getattr(channel, "category", None) else None
-            ),
+            "parent_id": (str(channel.category.id) if channel.category else None),
             "nsfw": getattr(channel, "nsfw", False),
             "permissions_synced": getattr(channel, "permissions_synced", None),
         }
@@ -83,12 +78,14 @@ class ConfigModel:
     prefix: str
     prefix_enabled: bool
     level_per_message: int
-    levelup_channel: int | None
+    levelup_channel: str | None
     config_ver: int
-    modules: ModuleConfig  # <-- new field
+    modules: ModuleConfig
 
     @classmethod
-    def from_db_rows(cls, guild_row: tuple, module_row: tuple | None) -> "ConfigModel":
+    def from_db_rows(
+        cls, guild_row: tuple | Any, module_row: tuple | Any | None
+    ) -> "ConfigModel":
         if module_row is None:
             # set all modules to False by default
             module_config = ModuleConfig(
@@ -145,13 +142,11 @@ def has_permissions_ipc(*, permissions: Permissions):
                         logger.warning(f"Failed fetching guild: {e}")
                         return {"error": 4001, "message": "guild not found"}
 
-                # Defensive: data.user_guilds may be None or missing
                 user_guilds = getattr(data, "user_guilds", None)
                 if not user_guilds:
                     logger.warning("No user_guilds present on data")
                     return {"error": 4002, "message": "missing user guilds"}
 
-                # Defensive: ensure user_guilds is iterable list of dicts
                 if not isinstance(user_guilds, (list, tuple)):
                     logger.warning("user_guilds is not a list/tuple")
                     return {"error": 4003, "message": "invalid user guilds format"}
@@ -162,7 +157,7 @@ def has_permissions_ipc(*, permissions: Permissions):
                         logger.warning(f"user_guild entry is not a dict: {g}")
                         continue
                     try:
-                        user_guild_ids.add(int(g.get("id")))
+                        user_guild_ids.add(g.get("id"))
                     except Exception:
                         logger.warning(f"Invalid guild id in user_guild: {g}")
                         continue
@@ -204,12 +199,8 @@ def has_permissions_ipc(*, permissions: Permissions):
                 )
 
             except Exception as e:
-                # Print full traceback
-                import traceback, sys
-
                 tb = "".join(traceback.format_exception(type(e), e, e.__traceback__))
                 logger.error(f"Exception in permission check:\n{tb}")
-                # Optionally print to stderr or console
                 print(f"Exception in permission check:\n{tb}", file=sys.stderr)
                 return {"error": 5000, "message": "internal server error"}
 
@@ -222,13 +213,13 @@ FORBIDDEN_KEYS = {"config_ver", "timestamp"}
 
 
 class dashboard(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot: Codygen):
         self.bot = bot
         self.db: aiosqlite.Connection = bot.db
 
     @ipcx.route()
     async def add_bot(self, data):
-        return f"https://discord.com/oauth2/authorize?client_id={self.bot.user.id}"
+        return f"https://discord.com/oauth2/authorize?client_id={cast(discord.User, self.bot.user).id}"
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -238,7 +229,9 @@ class dashboard(commands.Cog):
     @has_permissions_ipc(permissions=Permissions(administrator=True))
     async def get_guild(self, data, guild=None, user_guild=None):
         cur: aiosqlite.Cursor = await self.db.cursor()
-
+        guild = self.bot.get_guild(data.guild_id)
+        if not guild:
+            guild = await self.bot.fetch_guild(data.guild_id)
         res = await cur.execute(
             "SELECT * FROM guilds WHERE guild_id=?", (data.guild_id,)
         )
@@ -281,7 +274,7 @@ class dashboard(commands.Cog):
             return {"error": 1000, "message": "no guild"}
         if not guild:
             return []
-        channels = ChannelSerializer.serialize_many(guild.channels)
+        channels = ChannelSerializer.serialize_many(list(guild.channels))
         channels.sort(key=lambda ch: ch["position"] or 0)
         return channels
 
@@ -312,7 +305,6 @@ class dashboard(commands.Cog):
 
         # Update guilds table
         if guilds_updates:
-
             columns = list(guilds_updates.keys())
             values = list(guilds_updates.values())
             set_clause = ", ".join(f"{col}=?" for col in columns)
@@ -377,5 +369,5 @@ class dashboard(commands.Cog):
         return parse_commands(self.bot.full_commands, self.bot)
 
 
-async def setup(bot: commands.Bot):
+async def setup(bot: Codygen):
     await bot.add_cog(dashboard(bot))

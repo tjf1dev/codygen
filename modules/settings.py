@@ -2,8 +2,13 @@ from discord.ext import commands
 from discord import app_commands
 from ext.ui_base import Message
 import discord
-from main import Color, get_prefix, setup_guild, logger
+from main import Color, get_prefix, logger, get_guild_config
 import aiosqlite
+from typing import AsyncGenerator, override
+import asyncio
+from ext.views import InitStart
+from PIL import Image
+from io import BytesIO
 
 # enabling this allows using a prefixed command for /settings init
 no_app_force = False
@@ -19,39 +24,10 @@ def recursive_update(original: dict, template: dict) -> dict:
     return original
 
 
-class InitHomeView(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-
-    @discord.ui.button(
-        label="Start", style=discord.ButtonStyle.green, custom_id="init_button"
-    )
-    async def init_button_callback(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-
-        await interaction.response.defer(ephemeral=True)
-        if not interaction.user.guild_permissions.administrator:
-            error_embed = discord.Embed(
-                title="Access Denied",
-                description="### You must have admin to run this, silly!",
-                color=discord.Color.red(),
-            )
-            await interaction.followup.send(embed=error_embed, ephemeral=True)
-            return
-        button.disabled = True
-        button.style = discord.ButtonStyle.secondary
-        button.label = "Please wait..."
-        await interaction.edit_original_response(view=InitHomeView())
-        logger.debug(f"starting initialization for guild {interaction.guild.id}")
-        async for embed in setup_guild(interaction.guild, gtype=1):
-            await interaction.followup.send(embeds=list(embed), ephemeral=True)
-
-
 class settings(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = "Settings commands to manage your bot instance."
+        self.description = "settings to manage your bot instance."
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -63,7 +39,7 @@ class settings(commands.Cog):
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
-        name="settings", description="Settings commands to manage your bot instance."
+        name="settings", description="settings to manage your bot instance."
     )
     async def settings(self, ctx: commands.Context):
         pass
@@ -80,6 +56,81 @@ class settings(commands.Cog):
             ephemeral=True,
         )
 
+    async def setup_guild(
+        self, guild: discord.Guild, gtype: int = 1
+    ) -> AsyncGenerator[discord.ui.View | discord.ui.LayoutView, bool]:
+        """
+        Setup (initalize) a guild.
+        Replaces on_guild_join and /settings init functions, and is shared between them.
+        Returns embeds in realtime.
+        Arguments:
+            guild: `discord.Guild` object with the guild to setup.
+            type: 1 = already existing guild, 2 = newly added guild
+        """
+        # gtype spoof for testing
+        # gtype = 2
+        logger.debug(f"now setting up {guild.id}...")
+        message = ""
+        if gtype == 2:
+            message += (
+                f"## welcome! codygen has been successfully added to {guild.name}.\n"
+            )
+        message += f"{'## ' if gtype != 2 else ''}codygen will now attempt to{' automatically' if gtype == 2 else None} initizalize in your server.\n"
+        message += "> please wait, it can take a while.\n"
+        message += "## support\n> join our [support server](https://discord.gg/WyxN6gsQRH).\n## issues and bugs\n> report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our github repository\n"
+
+        if gtype == 2:
+            message += "-# if something goes wrong: try running the </settings init:1340646304073650308> command in your guild.\n"
+        message += "-# initializer v3"
+        e = Message(
+            message=message,
+            color=Color.purple,
+        )
+        yield e
+        await asyncio.sleep(2)
+        bot_member = guild.me
+        required_permissions = discord.Permissions(
+            manage_roles=True,
+            manage_channels=True,
+            manage_guild=True,
+            view_audit_log=True,
+            read_messages=True,
+            send_messages=True,
+            manage_messages=True,
+            embed_links=True,
+            attach_files=True,
+            read_message_history=True,
+            mention_everyone=True,
+            use_external_emojis=True,
+            add_reactions=True,
+        )
+        if not bot_member.guild_permissions.is_superset(required_permissions):
+            missing_perms = [
+                perm
+                for perm, value in required_permissions
+                if not getattr(bot_member.guild_permissions, perm)
+            ]
+            permission_error = Message(
+                message=f"# initialization failed: missing permissions\n### missing the following permissions: `{', '.join(missing_perms)}`\nplease fix the permissions and try again!",
+                color=Color.negative,
+            )
+            yield permission_error
+            logger.debug("yielded permission_error")
+
+        db = self.bot.db
+        try:
+            await db.execute("INSERT INTO guilds (guild_id) VALUES (?)", guild.id)
+            config_already_made = False
+        except Exception:
+            config_already_made = True
+        await db.commit()
+        stage2 = Message(
+            message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}",
+            color=Color.positive,
+        )
+        yield stage2
+        logger.debug(f"...finished setting up {guild.id}")
+
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.has_guild_permissions(administrator=True)
     @settings.command(
@@ -91,27 +142,47 @@ class settings(commands.Cog):
         if not ctx.interaction:
             if not no_app_force:
                 await ctx.reply(
-                    "## A prefixed command won't work for this.\n### Please use the </settings init:1338195438494289964> command instead.",
+                    "## a prefixed command won't work for this.\n### please use the </settings init:1338195438494289964> command instead.",
                     ephemeral=True,
                 )
                 return
+        # embed = discord.Embed(
+        #     title="",
+        #     description="initializing temporarily disabled due to data system changes",
+        # )
         embed = discord.Embed(
             title="",
-            description="initializing temporarily disabled due to data system changes",
+            description="-# press the button below to start initialization.",
         )
-        await ctx.reply(embed=embed, ephemeral=True)
+
+        async def prepare_header_image(path: str):
+            with Image.open(path) as img:
+                new_size = (round(img.width / 2), round(img.height / 2))
+                img = img.resize(new_size)
+                byte_io = BytesIO()
+                img.save(byte_io, format="PNG")
+                byte_io.seek(0)
+                return discord.File(byte_io, filename="header.png")
+
+        await ctx.reply(
+            view=InitStart(self),
+            ephemeral=True,
+            file=await prepare_header_image("assets/images/bannername.png"),
+        )
 
     @commands.has_guild_permissions(administrator=True)
     @app_commands.describe(prefix="The new prefix to set")
     @settings.command(
         name="prefix", description="View the current prefix and change it."
     )
-    async def prefix(self, ctx: commands.Context, prefix: str = None):
-        old = await get_prefix(self.bot, ctx)
+    async def prefix(self, ctx: commands.Context, prefix: str | None = None):
+        if not ctx.guild:
+            return
+        old = await get_prefix(self.bot, ctx.message)
         con: aiosqlite.Connection = self.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
         e = Message(
-            "# prefix\n" f"the current prefix in this server is: `{old}`",
+            f"# prefix\nthe current prefix in this server is: `{old}`",
             accent_color=Color.white,
         )
         e2 = Message(
@@ -131,6 +202,18 @@ class settings(commands.Cog):
 
         await con.commit()
         await ctx.reply(view=e2)
+
+    @commands.Cog.listener()
+    async def on_guild_join(self, guild):
+        owner = guild.owner
+        if not owner:
+            return
+        try:
+            gen = self.setup_guild(guild, gtype=2)
+            async for view in gen:
+                await owner.send(view=view)
+        except Exception as e:
+            logger.error(f"An error occurred while trying to setup {guild.name}: {e}")
 
 
 async def setup(bot):

@@ -39,7 +39,7 @@ class info(commands.Cog):
     @info.command(name="user", description="view information about a user")
     @app_commands.describe(user="user to check")
     async def user(
-        self, ctx: commands.Context, user: discord.Member | discord.User = None
+        self, ctx: commands.Context, user: discord.Member | discord.User | None = None
     ):
         if not user:
             user = ctx.author
@@ -50,12 +50,18 @@ class info(commands.Cog):
         )
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @info.command(name="guild", description="view information about the current server")
+    @info.command(
+        name="guild",
+        description="view information about the current server",
+        aliases=["server"],
+    )
     async def guild(self, ctx: commands.Context):
         guild = ctx.guild
-        roles = await guild.fetch_roles()
+        if not guild:
+            return
+        roles = guild.roles
         members = guild.members
-        channels = await guild.fetch_channels()
+        channels = guild.channels
         bots = []
         users = []
         for m in members:
@@ -78,14 +84,14 @@ class info(commands.Cog):
         await ctx.reply(
             view=ServerInfo(
                 guild,
-                roles,
-                channels,
-                text_channels,
-                voice_channels,
-                other_channels,
-                members,
-                bots,
-                users,
+                len(roles),
+                len(channels),
+                len(text_channels),
+                len(voice_channels),
+                len(other_channels),
+                len(members),
+                len(bots),
+                len(users),
             ),
             mention_author=False,
         )
@@ -100,11 +106,11 @@ class info(commands.Cog):
         for cmd in cmds:
             # text += f"type: {cmd["is_subcommand"]}"
             if cmd["is_subcommand"] == 0:  # no
-                text += f"</{cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+                text += f"</{cmd['name']}:{cmd['id']}>\n{cmd['command'].get('description', '')}\n"
             if cmd["is_subcommand"] == 1:  # yes
-                text += f"</{cmd["parent"]["name"]} {cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+                text += f"</{cmd['parent']['name']} {cmd['name']}:{cmd['id']}>\n{cmd['command'].get('description', '')}\n"
             if cmd["is_subcommand"] == 2:  # sub-subcommand
-                text += f"</{cmd["parent"]["parent"]["name"]} {cmd["parent"]["name"]} {cmd["name"]}:{cmd["id"]}>\n{cmd["command"].get("description", "")}\n"
+                text += f"</{cmd['parent']['parent']['name']} {cmd['parent']['name']} {cmd['name']}:{cmd['id']}>\n{cmd['command'].get('description', '')}\n"
         await ctx.reply(view=Message(text))
 
 

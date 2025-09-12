@@ -17,11 +17,10 @@ class MissingEnvironmentVariable(CodygenError):
 
 
 class LastfmLoggedOutError(CodygenError):
-    pass
+    def __init__(self, message: str | None = None):
+        super().__init__(message) if message else None
+        self.message = message
 
 
 class ModuleDisabledError(CodygenError):
     pass
-
-
-# i will add more soon

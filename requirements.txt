@@ -10,3 +10,6 @@ jishaku
 pillow
 python-dateutil
 aiosqlite
+discord-ext-ipcx
+quartcord
+quart_cors

@@ -28,7 +28,10 @@ class moderation(commands.Cog):
     @moderation.command(
         name="viewbanned", description="view the server's banned people"
     )
+    @app_commands.default_permissions(ban_members=True)
     async def viewbanned(self, ctx: commands.Context):
+        if not ctx.guild or not isinstance(ctx.author, discord.Member):
+            return
         if ctx.author.guild_permissions.ban_members and ctx.author is not None:
             bans = [entry async for entry in ctx.guild.bans()]
             if len(bans) == 1:

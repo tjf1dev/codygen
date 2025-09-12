@@ -1,17 +1,35 @@
 import discord
-from discord.ui import LayoutView, TextDisplay, Container, Separator, Section, ActionRow
-from ext.utils import xp_to_level
+from discord.ui import (
+    LayoutView,
+    TextDisplay,
+    Container,
+    Separator,
+    Section,
+    ActionRow,
+    MediaGallery,
+    Button,
+)
 import time
 from ext.utils import timestamp
 from ext.colors import Color
 from ext.utils import parse_commands
 from ext.ui_base import Message
+from ext.errors import CodygenError
+import datetime
+import os
+import sys
+import psutil
 from discord.ext import commands
+from ext.logger import logger
+# from ext.utils import setup_guild
+
+# from discord.ext import commands
+from models import Codygen
 
 
 class HelpSelect(discord.ui.Select):
     def __init__(self, bot):
-        self.bot: commands.Bot = bot
+        self.bot: Codygen = bot
         options = []
 
         all_custom_commands = parse_commands(bot.full_commands)
@@ -150,8 +168,12 @@ class HelpActionRow(ActionRow):
 
 
 class HelpSection(Section):
-    def __init__(self, bot: commands.Bot):
-        super().__init__(accessory=discord.ui.Thumbnail(media=bot.user.avatar.url))
+    def __init__(self, bot: Codygen):
+        if not bot.user:
+            raise CodygenError("bot/bot user not found")
+        super().__init__(
+            accessory=discord.ui.Thumbnail(media=bot.user.display_avatar.url)
+        )
         self.add_item(
             TextDisplay(
                 f"# codygen\na multipurpose bot by tjf1\n[`code`](<https://github.com/tjf1dev/codygen>) • [`add codygen`](<https://discord.com/oauth2/authorize?client_id={bot.user.id})"
@@ -160,7 +182,7 @@ class HelpSection(Section):
 
 
 class HelpListLayout(LayoutView):
-    def __init__(self, header: str, content: str, bot: commands.Bot):
+    def __init__(self, header: str, content: str, bot: Codygen):
         super().__init__(timeout=None)
         container = Container(accent_color=Color.accent)
         self.add_item(container)
@@ -183,7 +205,7 @@ class HelpHomeView(LayoutView):
 
 
 class ChangelogLayout(LayoutView):
-    def __init__(self, bot: discord.ext.commands.Bot, commits: list):
+    def __init__(self, bot: Codygen, commits: list):
         super().__init__()
         # latest commit (big display)
         latest = commits[0]
@@ -204,18 +226,20 @@ class ChangelogLayout(LayoutView):
         commit_text = ""
         for commit in commits[1:6]:  # all 5 latest ones except for the first latest
             commit_text += (
-                f"-# [`{commit["sha"][:7]}`](<{commit["html_url"]}>)"
+                f"-# [`{commit['sha'][:7]}`](<{commit['html_url']}>)"
                 " • "
-                f"[`{commit["author"]["login"]}`](<{commit["author"]["html_url"]}>) "
-                f"`{commit["commit"]["message"].split('\n')[0]}`\n"
+                f"[`{commit['author']['login']}`](<{commit['author']['html_url']}>) "
+                f"`{commit['commit']['message'].split('\n')[0]}`\n"
             )
         container.add_item(TextDisplay(commit_text))
         self.add_item(container)
 
 
 class AboutLayout(LayoutView):
-    def __init__(self, bot: discord.ext.commands.Bot, contributors: str):
+    def __init__(self, bot: Codygen, contributors: str):
         super().__init__()
+        if not bot.user:
+            raise CodygenError("bot/bot user not found")
         container = Container()
         container.add_item(
             TextDisplay(
@@ -230,17 +254,13 @@ class AboutLayout(LayoutView):
                 "## contributors\n"
                 f"[`contribute to codygen`](<https://github.com/tjf1dev/codygen>)\n{contributors}"
             )
-        ).add_item(
-            Separator()
-        ).add_item(
+        ).add_item(Separator()).add_item(
             TextDisplay(
                 "## support\n"
                 "[`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n"
                 "it takes a long time making a bot, any support would be appreciated! :3"
             )
-        ).add_item(
-            Separator()
-        ).add_item(
+        ).add_item(Separator()).add_item(
             TextDisplay(
                 "thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3"
             )
@@ -251,17 +271,18 @@ class AboutLayout(LayoutView):
 class LevelupSection(Section):
     def __init__(
         self,
-        user: discord.User,
-        old_xp: int,
+        user: discord.User | discord.Member,
         xp: int,
         place_in_leaderboard: int,
         highest_boost: int,
+        old_level: int,
+        new_level: int,
     ):
-        super().__init__(accessory=discord.ui.Thumbnail(user.avatar.url))
+        super().__init__(accessory=discord.ui.Thumbnail(user.display_avatar.url))
         self.add_item(
             TextDisplay(
                 f"{user.mention}\n"
-                f"## level up! `{xp_to_level(float(old_xp))}` > **`{xp_to_level(float(xp))}`**\n"
+                f"## level up! `{old_level}` > **`{new_level}`**\n"
                 f"{f'-# {highest_boost}% boost\n' if highest_boost != 0 else ''}"
                 f"-# {xp}xp • #{place_in_leaderboard}"
             )
@@ -271,18 +292,25 @@ class LevelupSection(Section):
 class LevelupLayout(LayoutView):
     def __init__(
         self,
-        user: discord.User,
-        old_xp: int,
+        user: discord.User | discord.Member,
         xp: int,
         place_in_leaderboard: int,
         highest_boost: int,
+        old_level: int,
+        new_level: int,
     ):
-
         super().__init__()
         container = Container()
         self.add_item(container)
         container.add_item(
-            LevelupSection(user, old_xp, xp, place_in_leaderboard, highest_boost)
+            LevelupSection(
+                user,
+                xp,
+                place_in_leaderboard,
+                highest_boost,
+                old_level,
+                new_level,
+            )
         )
 
 
@@ -314,7 +342,7 @@ class LevelBoosts(LayoutView):
         else:
             container.add_item(
                 TextDisplay(
-                    f"> global: **{_global["percentage"]}%**\n> expires: **{timestamp(_global["expires"])}**"
+                    f"> global: **{_global['percentage']}%**\n> expires: **{timestamp(_global['expires'])}**"
                 )
             )
         if (
@@ -327,7 +355,7 @@ class LevelBoosts(LayoutView):
         else:
             container.add_item(
                 TextDisplay(
-                    f"> user: **{_user["percentage"]}%**\n> expires: **{timestamp(_user["expires"])}**"
+                    f"> user: **{_user['percentage']}%**\n> expires: **{timestamp(_user['expires'])}**"
                 )
             )
         if not _role:
@@ -344,7 +372,7 @@ class LevelBoosts(LayoutView):
                 ):
                     r_inactive += 1
                     continue
-                content += f"> role: <@&{role_id}>: **{role["percentage"]}%**\n> expires: **{timestamp(role["expires"])}**\n"
+                content += f"> role: <@&{role_id}>: **{role['percentage']}%**\n> expires: **{timestamp(role['expires'])}**\n"
             if r_inactive == 0:
                 inactive += 1
         if inactive == 4:
@@ -373,17 +401,28 @@ class LevelRefreshSummary(LayoutView):
             for role in removed_roles[user]:
                 removed_text += f"<@{user}>: - <@&{role}>\n"
         if not added_roles:
-            added_text = "no changes have been made."
+            added_text = ""
         if not removed_roles:
-            removed_roles = "no changes have been made."
-        container.add_item(TextDisplay("## added roles\n" + added_text))
-        container.add_item(Separator())
-        container.add_item(TextDisplay("## removed roles\n" + removed_text))
+            removed_text = ""
+        if not added_roles and not removed_roles:
+            container.add_item(TextDisplay("## no changes have been made."))
+        else:
+            (
+                container.add_item(TextDisplay("## added roles\n" + added_text))
+                if added_roles
+                else None
+            )
+            container.add_item(Separator())
+            (
+                container.add_item(TextDisplay("## removed roles\n" + removed_text))
+                if removed_roles
+                else None
+            )
 
 
 class UserInfoSection(Section):
     def __init__(self, user: discord.Member | discord.User):
-        super().__init__(accessory=discord.ui.Thumbnail(media=user.avatar.url))
+        super().__init__(accessory=discord.ui.Thumbnail(media=user.display_avatar.url))
         if user.display_avatar:
             avatar = f"[`avatar`]({user.display_avatar.url})"
         else:
@@ -394,13 +433,13 @@ class UserInfoSection(Section):
             banner = ""
         self.add_item(
             TextDisplay(
-                f"[`profile`](<https://discord.com/users/{user.id}>) • {avatar}{" • " if user.banner else ""}{banner}\n"
-                f"{f"server display name: `{user.display_name}`\n" if user.global_name != user.display_name else ""}"
+                f"[`profile`](<https://discord.com/users/{user.id}>) • {avatar}{' • ' if user.banner else ''}{banner}\n"
+                f"{f'server display name: `{user.display_name}`\n' if user.global_name != user.display_name else ''}"
                 f"display name: `{user.global_name}`\n"
                 f"username: `{user.name}`\n"
                 f"id: `{user.id}`\n"
-                f"{f"roles: `{len(user.roles)}`\n" if isinstance(user, discord.Member) else ""}"
-                f"{f"joined: <t:{round(user.joined_at.timestamp())}:R> (<t:{round(user.joined_at.timestamp())}:D>)\n" if isinstance(user, discord.Member) else ""}"
+                f"{f'roles: `{len(user.roles)}`\n' if isinstance(user, discord.Member) else ''}"
+                f"{f'joined: <t:{round(user.joined_at.timestamp())}:R> (<t:{round(user.joined_at.timestamp())}:D>)\n' if isinstance(user, discord.Member) and user.joined_at else ''}"
                 f"created: <t:{round(user.created_at.timestamp())}:R> (<t:{round(user.created_at.timestamp())}:D>)\n"
             )
         )
@@ -418,17 +457,29 @@ class UserInfo(LayoutView):
 
 class ServerInfoSection(Section):
     def __init__(self, guild: discord.Guild, roles: int):
-        super().__init__(accessory=discord.ui.Thumbnail(media=guild.icon.url))
-        self.add_item(
-            TextDisplay(
-                f"## server\n"
-                f"id: `{guild.id}`\n"
-                f"owner: {guild.owner.mention}\n"
-                f"roles: `{len(roles)}`\n"
-                f"[`icon url`](<{guild.icon.url}>)\n"
-                f"created: <t:{round(guild.created_at.timestamp())}:R> (<t:{round(guild.created_at.timestamp())}:D>)\n"
+        super().__init__(
+            accessory=discord.ui.Thumbnail(
+                media=(
+                    guild.icon.url
+                    if guild.icon
+                    else f"https://placehold.co/512x512?text={guild.name}&font=Montserrat"
+                )
             )
         )
+
+        text = f"## server\nid: `{guild.id}`\n"
+
+        if guild.owner:
+            text += f"owner: {guild.owner.mention}\n"
+
+        text += f"roles: `{roles}`\n"
+
+        if guild.icon:
+            text += f"[`icon url`](<{guild.icon.url}>)\n"
+
+        text += f"created: <t:{round(guild.created_at.timestamp())}:R> (<t:{round(guild.created_at.timestamp())}:D>)\n"
+
+        self.add_item(TextDisplay(text))
 
 
 class ServerInfo(LayoutView):
@@ -454,19 +505,16 @@ class ServerInfo(LayoutView):
         container.add_item(
             TextDisplay(
                 "## channels\n"
-                f"total: `{len(channels)}`\n"
-                f"text: `{len(text_channels)}`\n"
-                f"voice: `{len(voice_channels)}`\n"
-                f"other: `{len(other_channels)}`\n\n"
+                f"total: `{channels}`\n"
+                f"text: `{text_channels}`\n"
+                f"voice: `{voice_channels}`\n"
+                f"other: `{other_channels}`\n\n"
             )
         )
         container.add_item(Separator())
         container.add_item(
             TextDisplay(
-                "## members\n"
-                f"total: `{len(members)}`\n"
-                f"bots: `{len(bots)}`\n"
-                f"users: `{len(users)}`",
+                f"## members\ntotal: `{members}`\nbots: `{bots}`\nusers: `{users}`",
             )
         )
         # e = discord.Embed(
@@ -489,3 +537,131 @@ class ServerInfo(LayoutView):
         #         *await avg_color(guild.icon.url) if guild.icon else (0, 0, 0)
         #     ),
         # )
+
+
+class PingSection(Section):
+    def __init__(self, bot: Codygen):
+        if not bot.user:
+            return
+        super().__init__(accessory=discord.ui.Thumbnail(bot.user.display_avatar.url))
+        self.add_item(TextDisplay("## codygen\nmultipurpose discord by tjf1 and more"))
+
+
+class Ping(LayoutView):
+    def __init__(self, bot: Codygen):
+        super().__init__()
+        commands_list = [
+            command.name
+            for command in bot.commands
+            if not isinstance(command, commands.Group)
+        ] + [
+            command.name
+            for command in bot.tree.walk_commands()
+            if not isinstance(command, commands.Group)
+        ]
+        for cog in bot.cogs.values():
+            for command in cog.get_commands():
+                if not isinstance(command, commands.Group):
+                    commands_list.append(command.name)
+        for command in bot.walk_commands():
+            if not isinstance(command, commands.Group):
+                commands_list.append(command.name)
+            else:
+                for subcommand in command.walk_commands():  # type: ignore
+                    commands_list.append(subcommand.name)
+        current_time = time.time()
+        difference = int(round(current_time - bot.start_time))
+        uptime = datetime.timedelta(seconds=difference)
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        process = psutil.Process(os.getpid())
+
+        uptime = f"{days:02}:{hours:02}:{minutes:02}:{seconds:02}"
+        uptime_alt = f"{days} days, {hours} hours, {minutes:02}:{seconds:02}"
+
+        ram_usage = process.memory_info().rss / 1024**2
+        total_memory = psutil.virtual_memory().total / 1024**2
+        cpu_usage = psutil.cpu_percent(interval=1)
+
+        container = Container()
+        self.add_item(container)
+        container.add_item(PingSection(bot))
+        container.add_item(TextDisplay(f"### latency: `{round(bot.latency * 1000)}ms`"))
+        container.add_item(Separator())
+        container.add_item(TextDisplay(f"### uptime\n`{uptime_alt}`"))
+        container.add_item(Separator())
+        container.add_item(
+            TextDisplay(
+                f"### usage\n`RAM: {ram_usage:.2f}mB/{total_memory:.2f}mB CPU: {cpu_usage}%`"
+            )
+        )
+        container.add_item(Separator())
+        container.add_item(
+            TextDisplay(
+                f"### stats\n`{len(set(commands_list))} commands`\n`{len(bot.guilds)} servers`\n`{len(bot.users)} users`"
+            )
+        )
+        container.add_item(Separator())
+        container.add_item(
+            TextDisplay(
+                f"### runtime\n`running discord.py {discord.__version__} on python {sys.version.split()[0]}`"
+            )
+        )
+
+
+class InitStartButton(discord.ui.Button):
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+        self.label = "Start"
+        self.style = discord.ButtonStyle.primary
+        self.custom_id = "init_button"
+
+    async def callback(self, interaction: discord.Interaction):
+        if not isinstance(interaction.user, discord.Member):
+            return
+        if not interaction.guild:
+            return
+        await interaction.response.defer(ephemeral=True)
+        if not interaction.user.guild_permissions.administrator:
+            error_embed = discord.Embed(
+                title="access denied",
+                description="### you need admin to run this!",
+                color=Color.negative,
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            return
+        self.disabled = True
+        self.style = discord.ButtonStyle.secondary
+        self.label = "please wait..."
+        await interaction.edit_original_response(view=InitStart(self.cog))
+        logger.debug(f"starting initialization for guild {interaction.guild.id}")
+
+        gen = self.cog.setup_guild(interaction.guild, gtype=1)
+        async for view in gen:
+            await interaction.followup.send(view=view, ephemeral=True)
+
+
+class InitStart(LayoutView):
+    def __init__(self, cog):
+        super().__init__()
+        self.cog = cog
+        container = Container()
+        self.add_item(container)
+        logger.debug(os.getcwd())
+        image = MediaGallery().add_item(media="attachment://header.png")
+        docs_button = Button(
+            style=discord.ButtonStyle.url,
+            url="https://codygen.tjf1.dev",
+            label="Website",
+        )
+        row = ActionRow().add_item(InitStartButton(self.cog)).add_item(docs_button)
+
+        container.add_item(image)
+        container.add_item(
+            TextDisplay(
+                "# codygen\npress the button below to start initalization.\nthis will create a configuration and check for permissions"
+            )
+        )
+        container.add_item(row)

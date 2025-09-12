@@ -3,11 +3,12 @@ import os
 import aiofiles
 import aiohttp
 import hashlib
-import base64
 import json
 from quart import render_template
 
 from ext.logger import logger
+from typing import cast
+from utils import state_to_id
 
 # import ext.errors
 from main import ensure_env
@@ -15,20 +16,22 @@ from main import ensure_env
 app = "codygen"
 
 
-def state_to_id(state: str) -> str:
-    euid = state.split("@")[0]
-    return base64.b64decode(euid).decode()
-
-
 app = quart.Quart("codygen")
 
 
+# TODO make a shared response object??? so the json responses arent so messy
 @app.route("/callback")
 async def callback():
     try:
         logger.debug("received callback")
         token = quart.request.args.get("token")
         state = quart.request.args.get("state")
+        if not state:
+            output = {
+                "error": "state missing",
+                "details": "please include state in the request",
+            }
+            return output
         uid = state_to_id(state)
         try:
             api_key = os.environ["LASTFM_API_KEY"]
@@ -95,5 +98,12 @@ async def root():
     return {"status": "codygen is online"}
 
 
+@app.before_serving
+async def startup():
+    logger.info(f"webserver started at :{os.getenv('WEB_PORT')}")
+
+
 ensure_env()
-app.run(port=os.getenv("WEB_PORT"))
+# logger.debug("starting webserver :{os.getenv('WEB_PORT')}")
+port = cast(int, os.getenv("WEB_PORT"))
+app.run(port=port)

@@ -3,13 +3,16 @@ import time
 import os
 import aiohttp
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 from main import logger, Color
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from PIL import Image
 from io import BytesIO
+from typing import cast
+from ext.ui_base import Message
+from main import get_prefix
 
 
 async def image_url_to_gif(url: str) -> str:
@@ -38,7 +41,6 @@ def parse_msglink(link: str):
 
 
 class MessageLayout(discord.ui.LayoutView):
-
     def __init__(self, message: str, **kwargs):
         super().__init__()
 
@@ -50,7 +52,6 @@ class MessageLayout(discord.ui.LayoutView):
 
 
 class FailedToConvertLayout(MessageLayout):
-
     def __init__(self, **kwargs):
         super().__init__(
             "## No attachments found in this message.\nPlease make sure you select a message with an image to convert it into a GIF.",
@@ -59,7 +60,6 @@ class FailedToConvertLayout(MessageLayout):
 
 
 class GIFMediaGallery(discord.ui.MediaGallery):
-
     def __init__(self, attachments: list[discord.File]):
         super().__init__()
 
@@ -68,7 +68,6 @@ class GIFMediaGallery(discord.ui.MediaGallery):
 
 
 class GIFMediaLayout(discord.ui.LayoutView):
-
     def __init__(self, paths: list[discord.File], **kwargs):
         super().__init__()
 
@@ -106,9 +105,8 @@ async def convert_to_gif(interaction: discord.Interaction, message: discord.Mess
 
 
 class utility(commands.Cog):
-
     def __init__(self, bot):
-        self.bot: commands.Bot = bot
+        self.bot = bot
         self.description = "helpful tools you might need"
 
     # hey, for self-hosted users: #! please don’t remove this command
@@ -119,12 +117,13 @@ class utility(commands.Cog):
     # enjoy using codygen!
     @commands.command()
     async def whoami(self, ctx: commands.Context):
-        await ctx.reply(embed=discord.Embed(
-            title="",
-            description=
-            "# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py>))",
-            color=Color.negative,
-        ))
+        await ctx.reply(
+            embed=discord.Embed(
+                title="",
+                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py>))",
+                color=Color.negative,
+            )
+        )
 
     # deltarune,, nevr heard of this game smh
     # @tasks.loop(hours=24)
@@ -154,28 +153,25 @@ class utility(commands.Cog):
 
     # @commands.Cog.listener()
 
-    @tasks.loop(seconds=5.0)
-    async def heartbeat(self):
-        logger.debug("heartbeat ping")
-
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
 
         self.bot.tree.add_command(convert_to_gif)
-        if not self.heartbeat.is_running():
-            self.heartbeat.start()
         logger.debug("added convert to gif command")
 
-    @commands.hybrid_group(name="utility",
-                           description="tools that can be helpful sometimes!")
+    @commands.hybrid_group(
+        name="utility", description="tools that can be helpful sometimes!"
+    )
     async def utility(self, ctx: commands.Context):
         await ctx.reply("utility")
 
     @utility.command(name="pfp", description="get someone's pfp")
-    async def pfp(self, ctx: commands.Context, user: discord.User = None):
+    async def pfp(
+        self, ctx: commands.Context, user: discord.Member | discord.User | None = None
+    ):
         if user is None:
             user = ctx.author
-        avatar = user.avatar.url
+        avatar = user.display_avatar.url
         embed = discord.Embed(color=0x8FF0A4)
         embed.set_image(url=avatar)
         await ctx.reply(embed=embed)
@@ -188,8 +184,7 @@ class utility(commands.Cog):
     @commands.has_permissions(manage_messages=True)
     @status.command(
         name="post",
-        description=
-        "status updates for various things, post update. timestamps are in CEST",
+        description="status updates for various things, post update. timestamps are in CEST",
     )
     @app_commands.describe(
         initial="first entry in the status log",
@@ -202,8 +197,8 @@ class utility(commands.Cog):
         ctx: commands.Context,
         initial: str,
         title: str = "Downtime",
-        channel: discord.TextChannel = None,
-        ping: discord.Role = None,
+        channel=None,
+        ping: discord.Role | None = None,
     ):
         now_cest = datetime.now(ZoneInfo("Europe/Warsaw"))
         if not channel:
@@ -221,7 +216,7 @@ class utility(commands.Cog):
             content = ping.mention
         msg = await channel.send(content, embed=e)
         await ctx.reply(
-            f"posted to {channel.mention}!\nlink: `{msg.jump_url}` ({msg.jump_url})",
+            f"posted to {channel.mention}!\nlink: `{msg.jump_url}` ({msg.jump_url})",  # type: ignore
             ephemeral=True,
         )
 
@@ -232,22 +227,22 @@ class utility(commands.Cog):
         content="entry to be added to the message",
         ping="whether to ping the specified role again (defaults to true)",
     )
-    async def status_add(self,
-                         ctx: commands.Context,
-                         link: str,
-                         content: str,
-                         ping: bool = True):
+    async def status_add(
+        self, ctx: commands.Context, link: str, content: str, ping: bool = True
+    ):
         parsed = parse_msglink(link)
         if not parsed:
             await ctx.reply("invalid link", ephemeral=True)
             return
         self.bot: commands.Bot
         gid, cid, mid = parsed
-        channel: discord.TextChannel = self.bot.get_channel(cid)
+        channel: discord.TextChannel = self.bot.get_channel(cid)  # type: ignore
         msg: discord.Message = await channel.fetch_message(mid)
         e = msg.embeds[0]
-        if e.footer.text.startswith("00"):
+        if e.footer.text.startswith("00"):  # type:ignore
             await ctx.reply("already closed")
+            return
+        if not self.bot.user:
             return
         if msg.author.id != self.bot.user.id or not e.footer.text == str(channel.id):
             await ctx.reply("i can't edit that message", ephemeral=True)
@@ -260,12 +255,17 @@ class utility(commands.Cog):
         pingc = msg.content
 
         if not e:
-            ctx.reply("message may be invalid, please double check", ephemeral=True)
+            await ctx.reply(
+                "message may be invalid, please double check", ephemeral=True
+            )
             return
         desc = e.description or ""
 
-        odate_match = (re.search(r"\[(\d{2}/\d{2}/\d{2}) CEST",
-                                 desc.splitlines()[0]) if desc else None)
+        odate_match = (
+            re.search(r"\[(\d{2}/\d{2}/\d{2}) CEST", desc.splitlines()[0])
+            if desc
+            else None
+        )
         desc += "\n"
 
         if not odate_match or odate_match.group(1) != date:
@@ -273,8 +273,9 @@ class utility(commands.Cog):
 
         desc += f"`[{time}]` {content}"
 
-        embed = discord.Embed(title=e.title, description=desc,
-                              color=e.color).set_footer(text=f"{channel.id}")
+        embed = discord.Embed(
+            title=e.title, description=desc, color=e.color
+        ).set_footer(text=f"{channel.id}")
         await msg.edit(embed=embed)
 
         if ping and pingc.strip():
@@ -301,13 +302,13 @@ class utility(commands.Cog):
             return
         gid, cid, mid = parsed
         self.bot: commands.Bot
-        channel: discord.TextChannel = self.bot.get_channel(cid)
+        channel = cast(discord.abc.MessageableChannel, self.bot.get_channel(cid))
         msg: discord.Message = await channel.fetch_message(mid)
         e = msg.embeds[0]
-        if e.footer.text.startswith("00"):
+        if e.footer.text.startswith("00"):  # type: ignore
             await ctx.reply("already closed")
             return
-        if msg.author.id != self.bot.user.id or not e.footer.text == str(channel.id):
+        if msg.author.id != self.bot.user.id or not e.footer.text == str(channel.id):  # type: ignore
             await ctx.reply("i can't edit that message", ephemeral=True)
             return
 
@@ -318,8 +319,11 @@ class utility(commands.Cog):
         pingc = msg.content
         desc = e.description or ""
 
-        odate_match = (re.search(r"\[(\d{2}/\d{2}/\d{2}) CEST",
-                                 desc.splitlines()[0]) if desc else None)
+        odate_match = (
+            re.search(r"\[(\d{2}/\d{2}/\d{2}) CEST", desc.splitlines()[0])
+            if desc
+            else None
+        )
         desc += "\n"
 
         if not odate_match or odate_match.group(1) != date:
@@ -328,7 +332,7 @@ class utility(commands.Cog):
         desc += f"`[{time} - resolved]`"
 
         embed = discord.Embed(
-            title=e.title + " - resolved",
+            title=e.title + " - resolved",  # type: ignore
             description=desc,
             color=e.color if not color_override else 0x17FF7F,
         ).set_footer(text=f"00{channel.id}")
@@ -338,40 +342,53 @@ class utility(commands.Cog):
             await channel.send(pingc, reference=msg)
         await ctx.reply("closed!", ephemeral=True)
 
-    # now some exclusives i need for my server
-    # guild id will be hardcoded
-    import re
-
-    @commands.Cog.listener("on_message")
-    async def on_message(self, message: discord.Message):
-        if message.guild is None:
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if not self.bot.user:
             return
-
-        if message.guild.id != 1333785291584180244:
-            return
-
         if message.author.bot:
             return
+        if message.content.strip() == f"<@{self.bot.user.id}>":
+            e = Message(
+                message=f"# hey there! im codygen\n### try using </help:1338168344506925108>! the prefix for this server is: `{get_prefix(self.bot, message)}`",
+                color=Color.accent,
+            )
+            await message.reply(view=e)
 
-        url_pattern = re.compile(
-            r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+\.(?:png|jpg|jpeg|gif|webp|bmp)"
-        )
-        urls = url_pattern.findall(message.content)
+    # # now some exclusives i need for my server
+    # # guild id will be hardcoded
+    # import re
 
-        if urls:
-            perms = message.channel.permissions_for(message.author)
-            return
-            if not perms.embed_links:
-                sticker = await message.guild.fetch_sticker(1370752176787558451)
-                if sticker:
-                    await message.reply(stickers=[sticker])
-                    return
-                else:
-                    return
-            else:
-                return
-        else:
-            return
+    # @commands.Cog.listener("on_message")
+    # async def on_message(self, message: discord.Message):
+    #     if message.guild is None:
+    #         return
+
+    #     if message.guild.id != 1333785291584180244:
+    #         return
+
+    #     if message.author.bot:
+    #         return
+
+    #     url_pattern = re.compile(
+    #         r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+\.(?:png|jpg|jpeg|gif|webp|bmp)"
+    #     )
+    #     urls = url_pattern.findall(message.content)
+
+    #     if urls:
+    #         perms = message.channel.permissions_for(message.author)
+    #         return
+    #         if not perms.embed_links:
+    #             sticker = await message.guild.fetch_sticker(1370752176787558451)
+    #             if sticker:
+    #                 await message.reply(stickers=[sticker])
+    #                 return
+    #             else:
+    #                 return
+    #         else:
+    #             return
+    #     else:
+    #         return
 
 
 async def setup(bot):

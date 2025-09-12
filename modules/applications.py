@@ -29,6 +29,8 @@ class applications(commands.Cog):
         description="view the server's application form. this category is still in development",
     )
     async def view_form(self, ctx: commands.Context):
+        if not ctx.guild:
+            return
         raw = await custom_api_request(
             self.bot, f"/guilds/{ctx.guild.id}/member-verification", auth=True
         )
