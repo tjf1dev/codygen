@@ -223,7 +223,6 @@ class dashboard(commands.Cog):
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
-        logger.info("started dashboard (module)")
 
     @ipcx.route()
     @has_permissions_ipc(permissions=Permissions(administrator=True))

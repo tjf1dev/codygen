@@ -2,11 +2,11 @@ from discord.ext import commands
 from discord import app_commands
 from ext.ui_base import Message
 import discord
-from main import Color, get_prefix, logger, get_guild_config
+from main import Color, get_prefix, logger
 import aiosqlite
-from typing import AsyncGenerator, override
+from typing import AsyncGenerator
 import asyncio
-from ext.views import InitStart
+from views import InitStartLayout
 from PIL import Image
 from io import BytesIO
 
@@ -37,6 +37,7 @@ class settings(commands.Cog):
         logger.info(f"{self.__class__.__name__}: loaded.")
 
     @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
         name="settings", description="settings to manage your bot instance."
@@ -84,10 +85,30 @@ class settings(commands.Cog):
         message += "-# initializer v3"
         e = Message(
             message=message,
-            color=Color.purple,
+            accent_color=Color.purple,
         )
         yield e
         await asyncio.sleep(2)
+        logger.debug("attempting to insert database values")
+        db: aiosqlite.Connection = self.bot.db
+        try:
+            await db.execute("INSERT INTO guilds (guild_id) VALUES (?)", (guild.id,))
+            logger.debug("made default guild data")
+            config_already_made = False
+        except Exception as e:
+            logger.warning(
+                f"failed when inserting guild data for {guild.id}; {type(e).__name__}: {e}"
+            )
+            config_already_made = True
+        try:
+            await db.execute("INSERT INTO modules (guild_id) VALUES (?)", (guild.id,))
+            logger.debug("made default module data")
+        except Exception as e:
+            logger.warning(
+                f"failed when inserting module data for {guild.id}; {type(e).__name__}: {e}"
+            )
+            pass
+        await db.commit()
         bot_member = guild.me
         required_permissions = discord.Permissions(
             manage_roles=True,
@@ -112,21 +133,14 @@ class settings(commands.Cog):
             ]
             permission_error = Message(
                 message=f"# initialization failed: missing permissions\n### missing the following permissions: `{', '.join(missing_perms)}`\nplease fix the permissions and try again!",
-                color=Color.negative,
+                accent_color=Color.negative,
             )
             yield permission_error
             logger.debug("yielded permission_error")
 
-        db = self.bot.db
-        try:
-            await db.execute("INSERT INTO guilds (guild_id) VALUES (?)", guild.id)
-            config_already_made = False
-        except Exception:
-            config_already_made = True
-        await db.commit()
         stage2 = Message(
             message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}",
-            color=Color.positive,
+            accent_color=Color.positive,
         )
         yield stage2
         logger.debug(f"...finished setting up {guild.id}")
@@ -146,14 +160,6 @@ class settings(commands.Cog):
                     ephemeral=True,
                 )
                 return
-        # embed = discord.Embed(
-        #     title="",
-        #     description="initializing temporarily disabled due to data system changes",
-        # )
-        embed = discord.Embed(
-            title="",
-            description="-# press the button below to start initialization.",
-        )
 
         async def prepare_header_image(path: str):
             with Image.open(path) as img:
@@ -165,7 +171,7 @@ class settings(commands.Cog):
                 return discord.File(byte_io, filename="header.png")
 
         await ctx.reply(
-            view=InitStart(self),
+            view=InitStartLayout(self),
             ephemeral=True,
             file=await prepare_header_image("assets/images/bannername.png"),
         )

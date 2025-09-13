@@ -3,9 +3,9 @@ from discord import app_commands
 import discord
 import os
 import aiohttp
-from ext import errors, views
-from main import logger, Color, verify, get_global_config
-from ext.views import HelpHomeView, Ping
+from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout
+from main import logger, Color, get_global_config
+from ext import errors
 
 
 class codygen(commands.Cog):
@@ -16,24 +16,21 @@ class codygen(commands.Cog):
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
 
-    @verify()
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
     @commands.hybrid_command(
         name="ping", description="shows how well is codygen doing!"
     )
     async def ping(self, ctx: commands.Context):
-        await ctx.reply(view=Ping(self.bot), ephemeral=False)
+        await ctx.reply(view=PingLayout(self.bot), ephemeral=False)
 
-    @verify()
     @commands.hybrid_command(
         name="help", description="shows useful info about the bot."
     )
     async def help(self, ctx: commands.Context):
         await self.bot.refresh_commands()
-        await ctx.reply(view=HelpHomeView(self.bot), ephemeral=True)
+        await ctx.reply(view=HelpLayout(self.bot), ephemeral=True)
 
-    @verify()
     @commands.hybrid_command(
         name="add", description="lets you add codygen to your server or profile"
     )
@@ -89,7 +86,7 @@ class codygen(commands.Cog):
                 raise errors.DefaultError("response is not json")
             except Exception as e:
                 raise errors.DefaultError(f"unexpected error parsing json: {e}")
-        await ctx.reply(view=views.ChangelogLayout(self.bot, data))
+        await ctx.reply(view=ChangelogLayout(self.bot, data))
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
@@ -134,7 +131,7 @@ class codygen(commands.Cog):
         for c in data:
             co = c["contributions"]
             contributors += f"[`{c['login']}`](<{c['html_url']}>): {co} contribution{'s' if co > 1 else ''}\n"
-        await ctx.reply(view=views.AboutLayout(self.bot, contributors))
+        await ctx.reply(view=AboutLayout(self.bot, contributors))
 
 
 async def setup(bot):

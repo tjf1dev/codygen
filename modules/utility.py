@@ -154,10 +154,9 @@ class utility(commands.Cog):
     # @commands.Cog.listener()
 
     async def cog_load(self):
-        logger.ok(f"loaded {self.__class__.__name__}")
-
         self.bot.tree.add_command(convert_to_gif)
         logger.debug("added convert to gif command")
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     @commands.hybrid_group(
         name="utility", description="tools that can be helpful sometimes!"
@@ -176,12 +175,14 @@ class utility(commands.Cog):
         embed.set_image(url=avatar)
         await ctx.reply(embed=embed)
 
-    @commands.has_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True, manage_channels=True)
+    @commands.has_guild_permissions(manage_messages=True, manage_channels=True)
     @utility.group(name="status", description="status updates for various things")
     async def status(self, ctx: commands.Context):
         pass
 
-    @commands.has_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True, manage_channels=True)
+    @commands.has_guild_permissions(manage_messages=True, manage_channels=True)
     @status.command(
         name="post",
         description="status updates for various things, post update. timestamps are in CEST",
@@ -220,7 +221,8 @@ class utility(commands.Cog):
             ephemeral=True,
         )
 
-    @commands.has_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True, manage_channels=True)
+    @commands.has_guild_permissions(manage_messages=True, manage_channels=True)
     @status.command(name="add", description="add an event to a status.")
     @app_commands.describe(
         link="link to the original message",
@@ -282,7 +284,8 @@ class utility(commands.Cog):
             await channel.send(pingc, reference=msg)
         await ctx.reply("updated!", ephemeral=True)
 
-    @commands.has_permissions(manage_messages=True)
+    @app_commands.checks.has_permissions(manage_messages=True, manage_channels=True)
+    @commands.has_guild_permissions(manage_messages=True, manage_channels=True)
     @status.command(name="close", description="resolve status event.")
     @app_commands.describe(
         link="link to the original message",
@@ -350,8 +353,8 @@ class utility(commands.Cog):
             return
         if message.content.strip() == f"<@{self.bot.user.id}>":
             e = Message(
-                message=f"# hey there! im codygen\n### try using </help:1338168344506925108>! the prefix for this server is: `{get_prefix(self.bot, message)}`",
-                color=Color.accent,
+                message=f"# hey there! im codygen\n### try using </help:1338168344506925108>! the prefix for this server is: `{await get_prefix(self.bot, message)}`",
+                accent_color=Color.accent,
             )
             await message.reply(view=e)
 

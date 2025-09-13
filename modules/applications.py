@@ -22,7 +22,8 @@ class applications(commands.Cog):
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
 
-    @commands.has_permissions(manage_guild=True)
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @commands.has_guild_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)
     @apps.command(
         name="view-form",

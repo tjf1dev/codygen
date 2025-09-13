@@ -5,15 +5,15 @@ import time
 from discord.ext import commands
 from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-from main import logger, verify
+from main import logger
 from ext.utils import xp_to_level, level_to_xp
-from ext.views import LevelupLayout
 import aiosqlite
 from ext.ui_base import Message
-from ext.views import LevelRefreshSummary, LevelBoosts
+from views import LevelRefreshSummaryLayout, LevelBoostsLayout, LevelupLayout
 from ext.colors import Color
 from typing import Any
 from models import Codygen
+import ext.errors
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -174,6 +174,67 @@ async def send_levelup(
     await channel.send(view=view)
 
 
+async def reward_xp(
+    member: discord.Member, guild: discord.Guild, con: aiosqlite.Connection, xp
+):
+    """
+    if applicable grants roles for the user based on their xp
+    """
+    cur: aiosqlite.Cursor = await con.cursor()
+
+    rewards_res = await cur.execute(
+        "SELECT level, reward_id FROM level_rewards WHERE guild_id=?",
+        (guild.id,),
+    )
+    rewards = await rewards_res.fetchall()
+    list(rewards).sort(key=lambda x: x[0])
+
+    user_level = xp_to_level(xp)
+    roles_to_add = [
+        role_id for level_required, role_id in rewards if user_level >= level_required
+    ]
+
+    current_role_ids = {role.id for role in member.roles}
+    missing_roles = [
+        role_id for role_id in roles_to_add if role_id not in current_role_ids
+    ]
+
+    roles_to_remove = [
+        role_id
+        for level_required, role_id in rewards
+        if user_level < level_required and role_id in current_role_ids
+    ]
+    added_roles = {}
+    removed_roles = {}
+    if missing_roles:
+        try:
+            roles_to_add = [
+                role
+                for rid in missing_roles
+                if (role := guild.get_role(rid)) is not None
+            ]
+
+            await member.add_roles(*roles_to_add, reason="Level refresh sync")
+            added_roles[member.id] = missing_roles
+        except Exception as e:
+            logger.error(f"failed to add roles to {member}: {e}")
+
+    if roles_to_remove:
+        try:
+            roles_to_remove_objs = [
+                role
+                for rid in roles_to_remove
+                if (role := guild.get_role(rid)) is not None
+            ]
+
+            await member.remove_roles(
+                *roles_to_remove_objs, reason="Level refresh sync"
+            )
+            removed_roles[member.id] = roles_to_remove
+        except Exception as e:
+            logger.error(f"failed to remove roles from {member}: {e}")
+
+
 async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connection):
     """
     Main handler for xp gain
@@ -214,6 +275,7 @@ async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connecti
     new_level = xp_to_level(new_xp)
     if new_level > level:
         logger.debug(f"{user.id} leveled up from {level} {xp} to {new_level} {new_xp}")
+        await reward_xp(user, guild, con, new_xp)
         await send_levelup(user, guild, xp, new_xp, multiplier, cur, level, new_level)
     await con.commit()
     # logger.debug(f"added {add}xp to {user.id}. this puts them at level {xp_to_level(new_xp)}, with {new_xp}xp.")
@@ -246,7 +308,7 @@ class level(commands.Cog):
         pass
 
     @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.guild_only()
     @level.group(name="boost", description="manage xp boosts")
@@ -254,6 +316,7 @@ class level(commands.Cog):
         pass
 
     @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @boost.command(name="global", description="set a global boost to this server")
     @app_commands.describe(
         percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
@@ -303,6 +366,7 @@ class level(commands.Cog):
         )
 
     @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @boost.command(name="role", description="set a boost to a role")
     @app_commands.describe(
         percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
@@ -352,6 +416,7 @@ class level(commands.Cog):
         )
 
     @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @boost.command(name="user", description="set a boost to a user in this server")
     @app_commands.describe(
         percentage="the percentage (multiplier) of the boost. set to 0 to remove the boost",
@@ -415,7 +480,8 @@ class level(commands.Cog):
                 user = await ctx.guild.fetch_member(ctx.author.id)
         boosts = await get_boosts(cur, ctx.guild, user)
         await ctx.reply(
-            view=LevelBoosts(boosts), allowed_mentions=discord.AllowedMentions.none()
+            view=LevelBoostsLayout(boosts),
+            allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @level.command(name="get", description="check your current level")
@@ -588,8 +654,9 @@ class level(commands.Cog):
             if os.path.exists(img_path):
                 os.remove(img_path)
 
-    @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @level.command(
         name="set",
         description="set a user's xp. requires administrator permissions. add L to use levels instead",
@@ -600,9 +667,6 @@ class level(commands.Cog):
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
         if not isinstance(ctx.author, discord.Member) or not ctx.guild:
-            return
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.reply("You do not have permission to use this command.")
             return
         if user is None:
             user = ctx.author
@@ -626,8 +690,9 @@ class level(commands.Cog):
             ephemeral=True,
         )
 
-    @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @level.command(
         name="add",
         description="add xp to a user. Use L at the end to add levels instead.",
@@ -639,10 +704,6 @@ class level(commands.Cog):
         cur: aiosqlite.Cursor = await con.cursor()
         if not isinstance(ctx.author, discord.Member) or not ctx.guild:
             return
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.reply("You do not have permission to use this command.")
-            return
-
         if user is None:
             user = ctx.author
         current_xp_res = await cur.execute(
@@ -674,8 +735,9 @@ class level(commands.Cog):
             ephemeral=True,
         )
 
-    @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
     @level.command(
         name="refresh",
         description="synchronizes all levels and grants role rewards. admin only",
@@ -683,10 +745,6 @@ class level(commands.Cog):
     async def levelrefresh(self, ctx: commands.Context):
         if not isinstance(ctx.author, discord.Member) or not ctx.guild:
             return
-        if not ctx.author.guild_permissions.administrator:
-            await ctx.reply("You do not have permission to use this command.")
-            return
-
         con: aiosqlite.Connection = ctx.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
 
@@ -759,7 +817,81 @@ class level(commands.Cog):
                     self.bot.log.error(f"Failed to remove roles from {member}: {e}")
 
         await ctx.reply(
-            view=LevelRefreshSummary(added_roles, removed_roles),
+            view=LevelRefreshSummaryLayout(added_roles, removed_roles),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
+    @level.group(name="rewards", description="level reward settings")
+    async def rewards(self, ctx: commands.Context):
+        pass
+
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
+    @level.command(name="setup", description="tweak leveling settings")
+    async def setup(
+        self,
+        ctx: commands.Context,
+        levelup_channel: discord.TextChannel | None = None,
+        xp_per_message: int | None = None,
+    ):
+        if not ctx.guild:
+            return
+        db = self.bot.db
+        if levelup_channel is None and xp_per_message is None:
+            raise ext.errors.CodygenUserError(
+                "levelup channel or level per message is required (hint: use the slash command)\nusage: level setup [levelup_channel] [xp_per_message]\nexample: level setup #levelup 10"
+            )
+
+        columns = []
+        params = []
+
+        if levelup_channel is not None:
+            columns.append("levelup_channel=?")
+            params.append(levelup_channel.id)
+
+        if xp_per_message is not None:
+            columns.append("level_per_message=?")
+            params.append(xp_per_message)
+
+        params.append(ctx.guild.id)
+
+        query = f"UPDATE guilds SET {', '.join(columns)} WHERE guild_id=?"
+        await db.execute(query, params)
+
+        await ctx.reply(
+            view=Message(
+                f"## success\n{f'`channel:` {levelup_channel.mention}' if levelup_channel else ''}\n{f'`xp per message:` `{xp_per_message}`' if xp_per_message else ''}",
+                accent_color=Color.positive,
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
+    @rewards.command(name="set", description="set a reward role to a level")
+    async def rewards_set(self, ctx: commands.Context, level: int, role: discord.Role):
+        if not ctx.guild:
+            return
+        db = self.bot.db
+        try:
+            await db.execute(
+                "INSERT INTO level_rewards (guild_id, level, reward_id) VALUES (?,?,?)",
+                (ctx.guild.id, level, role.id),
+            )
+        except Exception:
+            raise ext.errors.CodygenUserError(
+                "something went wrong (maybe the role reward already exists for this level?)"
+            )
+        await ctx.reply(
+            view=Message(
+                f"## success\nlevel {level} now rewards role {role.mention}",
+                accent_color=Color.positive,
+            ),
             allowed_mentions=discord.AllowedMentions.none(),
         )
 

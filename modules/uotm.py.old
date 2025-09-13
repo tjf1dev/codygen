@@ -97,7 +97,6 @@ class uotm(commands.Cog):
                 )
                 return
 
-    @commands.has_permissions(administrator=True)
     @uotm.command(
         name="finish", description="wipe uotm votes and finish the current month"
     )

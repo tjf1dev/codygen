@@ -7,19 +7,21 @@ import asyncio
 import sys
 
 DB_FILE = "codygen.db"
-config_ver = 1002
+config_ver = 1003
 
 
 async def create_table():
     async with aiosqlite.connect(DB_FILE) as con:
         await con.execute(
-            """CREATE TABLE IF NOT EXISTS guilds (
+            f"""--sql
+            CREATE TABLE IF NOT EXISTS guilds (
                 guild_id INTEGER PRIMARY KEY,
                 prefix TEXT DEFAULT '>',
                 prefix_enabled BOOLEAN DEFAULT 1,
                 level_per_message INTEGER DEFAULT 0,
                 levelup_channel INTEGER,
-                config_ver INTEGER DEFAULT 1002,
+                logging_settings TEXT DEFAULT '{{}}',
+                config_ver INTEGER DEFAULT {config_ver},
                 timestamp REAL
             )"""
         )
@@ -84,10 +86,29 @@ async def create_table():
                 moderation BOOLEAN DEFAULT 1,
                 settings BOOLEAN DEFAULT 1,
                 utility BOOLEAN DEFAULT 1
+                logging BOOLEAN DEFAULT 1
             )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS webhooks (
+                channel_id INTEGER,
+                webhook_id INTEGER,
+                webhook_token,
+                PRIMARY KEY (channel_id, webhook_id)
+
+            )
+            """
         )
         print("created (missing?) tables")
         await con.commit()
+
+
+async def add_column():
+    async with aiosqlite.connect(DB_FILE) as con:
+        table = input("table (e.g 'modules') >")
+        column = input("column name (e.g 'logging') >")
+        data = input("extra data (e.g 'BOOLEAN DEFAULT 1') >")
+        await con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {data}")
 
 
 async def convert_from_json():
@@ -211,6 +232,8 @@ async def user_tests():
 if __name__ == "__main__":
     if "-t" in sys.argv:
         asyncio.run(create_table())
+    elif "-c" in sys.argv:
+        asyncio.run(add_column())
     elif "-s" in sys.argv:
         asyncio.run(user_tests())
     else:

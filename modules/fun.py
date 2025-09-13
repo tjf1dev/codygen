@@ -1,4 +1,4 @@
-from main import verify, get_global_config
+from main import get_global_config
 import discord
 import requests
 import aiosqlite
@@ -31,7 +31,6 @@ class fun(commands.Cog):
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
 
-    @verify()
     @fun_group.command(name="ship", description="ship two people")  # type: ignore
     @app_commands.describe(
         user1="users to ship", user2="users to ship (defaults to you)"
@@ -159,7 +158,6 @@ class fun(commands.Cog):
     #         embeds.append(e)
     #     await ctx.reply(embeds=embeds, ephemeral=False if found else True)
 
-    @verify()
     @fun_group.command(name="wokemeter", description="see how WOKE someone is!")  # type: ignore
     @app_commands.describe(user="the user to check")
     async def wokemeter(
@@ -226,7 +224,6 @@ class fun(commands.Cog):
     #         fail = discord.Embed(title="cant find the game", color=Color.negative)
     #         await ctx.send(embed=fail)
 
-    @verify()
     @app_commands.allowed_contexts(guilds=True, dms=False)
     @app_commands.allowed_installs(guilds=True, users=False)
     @fun_group.command(name="guess", description="Guess the user by pfp!")  # type: ignore
@@ -299,7 +296,7 @@ class fun(commands.Cog):
     #             raz = "times"
     #         embed.add_field(name=f"{x}. {user}", value=f"Guessed {value} {raz}.")
     #     await ctx.send(embed=embed)
-    @verify()
+
     @fun_group.command(name="cat", description="get a random pic of a cat :3")  # type: ignore
     async def cat(self, ctx: commands.Context):
         url = get_global_config()["commands"]["cat"]["url"]

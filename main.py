@@ -13,10 +13,11 @@ import json
 import time
 import asyncio
 import base64
-import sys
 import aiohttp
 import logging
 import shutil
+import ext.errors
+import datetime
 import aiosqlite
 from discord.ext import commands, tasks
 from discord import app_commands
@@ -25,13 +26,14 @@ from colorama import Fore
 from ext.colors import Color
 from ext.logger import logger
 from db import connect, create_table
-from ext.utils import get_command
+from ext.utils import get_command, parse_flags, get_required_env, ensure_env
 from discord.ext import ipcx
 from ext.ui_base import Message
 from models import Codygen
 from typing import cast
 from ext.errors import CodygenError
-
+from traceback import format_exception
+from extensions.cache_commands import cache_commands
 # from ext.web import app
 
 DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
@@ -106,12 +108,16 @@ def state_to_id(state: str) -> str:
 async def get_prefix(
     bot: Codygen | commands.Bot | commands.AutoShardedBot | None = None,
     message: discord.Message | None = None,
-) -> str:
+) -> str | None:
     default_prefix = get_global_config().get("default_prefix", ">")
     if not bot or not message or not message.guild:
         return default_prefix
     bot = cast(Codygen, bot)
+    if not hasattr(bot, "db"):
+        logger.warning("tried to get prefix before fully initialized")
+        return default_prefix
     con: aiosqlite.Connection = bot.db
+
     cur: aiosqlite.Cursor = await con.cursor()
     try:
         res = await cur.execute(
@@ -175,17 +181,6 @@ async def request_with_json(
             return await response.json()
 
 
-def get_required_env() -> list:
-    r = []
-    with open(".env.template", "r") as f:
-        lines = f.readlines()
-        for line in lines:
-            if line.startswith("#") or not line or line == "\n":
-                continue
-            r.append(line.split("=")[0])
-    return r
-
-
 REQUIRED_ENV = get_required_env()
 
 
@@ -199,7 +194,9 @@ async def database() -> aiosqlite.Connection:
     logger.info("loading database")
     con = await connect()
     await con.execute("PRAGMA journal_mode=WAL;")
+
     client.db = con
+
     async with con.execute(
         "SELECT name FROM sqlite_master WHERE type='table'"
     ) as cursor:
@@ -218,30 +215,6 @@ async def database() -> aiosqlite.Connection:
     for name in table_names:
         logger.debug(f"loaded table {name}")
     return con
-
-
-def ensure_env():
-    """
-    Checks that all REQUIRED_ENV keys exist and are non-empty.
-    (so the user can copy it to .env and fill in real values),
-    then exits with a meaningful message.
-    """
-    missing = []
-    for key in REQUIRED_ENV:
-        val = os.getenv(key)
-        if not val:
-            missing.append(key)
-
-    if missing:
-        logger.error(
-            "Missing environment variables: "
-            + ", ".join(missing)
-            + "\nA `.env.template` file has been created.\n"
-            + "→ Copy it to `.env` and fill in the real values before restarting.\n"
-            + "For more details on how to configure the bot, please refer to the official documentation:\n"
-            + f"https://github.com/tjf1dev/codygen#self-hosting.{Fore.RESET}"
-        )
-        sys.exit(1)
 
 
 # load configs
@@ -302,7 +275,7 @@ async def on_ipc_error(self, endpoint, error):
 
 # client custom vars
 # these get passed to cogs
-client.color = Color
+flor = Color
 client.version = version
 client.refresh_commands = refresh_commands
 # load env
@@ -311,139 +284,8 @@ TOKEN = cast(str, os.getenv("CLIENT_TOKEN"))
 GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
 
 
-# views
-class HelpSelect(discord.ui.Select):
-    def __init__(self, bot):
-        options = []
-        self.bot = bot
-        if bot.cogs:
-            for cog_name, cog in bot.cogs.items():
-                if cog_name.lower() in ["jishaku"]:
-                    pass
-                else:
-                    description = getattr(
-                        cog, "description", "no description available."
-                    )
-                    options.append(
-                        discord.SelectOption(
-                            label=cog_name.lower(), description=description.lower()
-                        )
-                    )
-        else:
-            # add a fallback option if no cogs are loaded
-            options.append(
-                discord.SelectOption(
-                    label="No Modules Loaded", description="Failed to load module list."
-                )
-            )
-        super().__init__(
-            placeholder="Select a cog", max_values=1, min_values=1, options=options
-        )
-
-    async def callback(self, interaction: discord.Interaction):
-        embed = discord.Embed(title=f"codygen - {self.values[0]}", color=Color.white)
-        if self.values[0] == "No Modules Loaded":
-            fail = discord.Embed(
-                title="failed to load the list of modules",
-                description="please report this issue.",
-                color=Color.negative,
-            )
-            await interaction.response.edit_message(embed=fail)
-            return
-        cog = client.get_cog(self.values[0])
-        if cog is None:
-            fail = discord.Embed(
-                title="failed to load :broken_heart:",
-                description=f"module {self.values[0]} (cogs.{self.values[0]}) failed to load.",
-                color=Color.negative,
-            )
-            await interaction.response.edit_message(embed=fail)
-            return
-        elif len(cog.get_commands()) == 0:
-            fail = discord.Embed(
-                title="its quiet here...",
-                description=f"cogs.{self.values[0]} doesnt have any commands.",
-                color=Color.negative,
-            )
-            await interaction.response.edit_message(embed=fail)
-        else:
-            for command in cog.walk_commands():
-                description = (
-                    command.description
-                    if command.description != ""
-                    else "Figure it out yourself (no description provided)"
-                )
-                embed.add_field(
-                    name=command.name, value=f"```{description}```", inline=False
-                )
-            await interaction.response.edit_message(
-                embed=embed, view=HelpHomeView(client)
-            )
-
-
-class HelpWiki(discord.ui.Button):
-    def __init__(self):
-        super().__init__(
-            label="Documentation",
-            style=discord.ButtonStyle.link,
-            url="https://github.com/tjf1dev/codygen/wiki",
-        )
-
-
-class HelpHomeView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__()
-        self.add_item(HelpSelect(bot))
-        self.add_item(HelpWiki())
-
-
-class supportReply(discord.ui.View):
-    def __init__(self):
-        super().__init__()
-        self.add_item(SupportButton())
-
-
-class SupportButton(discord.ui.Button):
-    def __init__(self):
-        super().__init__(label="Start conversation", style=discord.ButtonStyle.primary)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.send_modal(SupportModal())
-
-
-class SupportModal(discord.ui.Modal, title="Reply to Support Ticket"):
-    response = discord.ui.TextInput(label="Response", style=discord.TextStyle.paragraph)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        # user_id = interaction.user.id
-        if not interaction.message:
-            return
-        original_user_id = interaction.message.content.splitlines()[0]
-        ticket_id = interaction.message.content.splitlines()[1]
-        user = await client.fetch_user(int(original_user_id))
-        try:
-            e = discord.Embed(
-                title=f"New reponse for ticket {ticket_id}",
-                description=f"```{self.response.value}```",
-            )
-            await user.send(embed=e)
-            e2 = discord.Embed(
-                title=f"{ticket_id} - reply sent",
-                description=f"```{self.response.value}```",
-                color=Color.positive,
-            )
-            await interaction.response.send_message(embed=e2)
-        except discord.errors.Forbidden:
-            await interaction.response.send_message(
-                "Couldn't send DM to user.", ephemeral=True
-            )
-        await interaction.response.send_message(
-            f"Response sent: {self.response.value}", ephemeral=True
-        )
-
-
 # events
-def verify():
+def verify_dec():
     """
     Checks for certain things that could prevent a command from sending
     """
@@ -488,23 +330,35 @@ def recursive_update(existing_config, template_config):
     return merge(existing_config, template_config)
 
 
-async def verify_alt(guild_id, interaction) -> bool:
-    """
-    verify() but instead of a decorator its a function
-    """
-    prefix_enabled = (await get_guild_config(guild_id))["prefix"]["prefix_enabled"]
-    if not prefix_enabled:
-        prefix_enabled = False
-    if interaction is not None:
+async def verify(ctx) -> bool:
+    if ctx.guild is None:
         return True
+    cur: aiosqlite.Cursor = await ctx.bot.db.cursor()
+    row = await (
+        await cur.execute(
+            "SELECT prefix_enabled FROM guilds WHERE guild_id=?", (ctx.guild.id,)
+        )
+    ).fetchone()
+
+    prefix_enabled = bool(row[0]) if row else False
+
+    if prefix_enabled is None:
+        prefix_enabled = False
+
+    if ctx.interaction is not None:
+        return True
+
     return prefix_enabled
 
 
 @client.event
 async def on_command(ctx: commands.Context):
     if not ctx.interaction:
-        await ctx.typing()
+        async with ctx.typing():
+            await asyncio.sleep(2.5)
     command = cast(commands.Command, ctx.command)
+    if not await verify(ctx):
+        return False
     logger.info(
         f"{command.qualified_name} has been used by {ctx.author.global_name} ({ctx.author.id})!"
     )
@@ -522,6 +376,12 @@ async def is_module_enabled(ctx: commands.Context):
 
     if not ctx.cog:
         logger.debug("allowing command: case 3")
+        return True
+    if (
+        ctx.command
+        and ctx.command.name == "init"
+        and ctx.cog.qualified_name == "settings"
+    ):
         return True
     if getattr(ctx.cog, "hidden", False):
         return True
@@ -551,50 +411,53 @@ async def is_module_enabled(ctx: commands.Context):
 async def on_command_error(ctx: commands.Context, error):
     if not ctx.command:
         return
-    if isinstance(error, commands.CheckFailure):
+    error = error.original
+    logger.error(
+        f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__} while running {ctx.command.qualified_name}: {error}"
+    )
+    tb = "".join(format_exception(type(error), error, error.__traceback__))
+    logger.error(tb)
+    if isinstance(
+        error,
+        commands.MissingPermissions
+        | app_commands.MissingPermissions
+        | commands.NotOwner,
+    ):
+        e = Message(
+            message="### you don't have permissions to run this command.",
+            accent_color=Color.negative,
+        )
+        await ctx.reply(view=e, ephemeral=True)
+    if isinstance(error, commands.CheckFailure | commands.errors.CheckFailure):
         return
-    if isinstance(error, commands.MissingPermissions):
-        e = discord.Embed(
-            title="you don't have permissions to run this command.",
-            color=Color.negative,
-        )
-        await ctx.reply(embed=e, ephemeral=True)
-    if isinstance(error, KeyError):
-        e = (
-            discord.Embed(
-                title="this server's configuration has malfunctioned.",
-                description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen) and the administrators of this server.",
-                color=Color.lblue,
-            )
-            .add_field(name="error", value=f"```{error}```")
-            .add_field(
-                name="command",
-                value=f"```{ctx.command.full_parent_name}```",
-                inline=False,
-            )
-            .add_field(name="version", value=f"```{version}```", inline=True)
-        )
-        await ctx.send(embed=e, ephemeral=False)  # Handle other errors normally
-
-        raise commands.errors.CommandError(str(error))
     elif isinstance(error, commands.CommandNotFound):
         return
+    elif isinstance(error, ext.errors.CodygenUserError):
+        e = Message(
+            message=f"### error\n{error}\n",
+            accent_color=Color.negative,
+        )
+        await ctx.send(view=e, ephemeral=True)
     else:
-        e = (
-            discord.Embed(
-                title="an error occurred while trying to run this command",
-                description="please report this to the [developers of this bot.](https://github.com/tjf1dev/codygen)",
-                color=Color.negative,
-            )
-            .add_field(name="error", value=f"```{error}```")
-            .add_field(name="command", value=f"```{ctx.command.name}```", inline=False)
-            .add_field(name="version", value=f"```{version}```", inline=True)
+        header = "an unexpected error occured."
+        if isinstance(
+            error,
+            ext.errors.MissingEnvironmentVariable | ext.errors.MisconfigurationError,
+        ):
+            header = "this server's configuration has malfunctioned."
+
+        e = Message(
+            message=f"## {header}\n"
+            "please report this to the administrators of this server, and the [developers of this bot.](https://github.com/tjf1dev/codygen/issues).\n"
+            f"### error\n```\n{type(error).__name__}: {error}```\n"
+            f"### command\n```\n{ctx.command.qualified_name}```\n"
+            f"### version\n```\n{version}```",
+            accent_color=Color.negative,
         )
-        await ctx.send(embed=e, ephemeral=True)  # Handle other errors normally
-        logger.error(
-            f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__}: {error}"
-        )
-        raise commands.errors.CommandError(str(error))
+        await ctx.send(view=e, ephemeral=True)
+
+        # optional: raise error (doesn't really fit here since this is the handler)
+        # raise commands.errors.CommandError(str(error))
 
 
 loaded_cogs = set()
@@ -618,6 +481,7 @@ async def on_ready():
 
     client.start_time = time.time()
     await refresh_commands()
+    start_time = time.time()
     logger.info("loading modules..")
     await client.load_extension("jishaku")  # jsk #* pip install jishaku
     config = get_global_config()
@@ -642,56 +506,74 @@ async def on_ready():
     admin_cog = client.get_cog("admin")
     if not admin_cog:
         return
+
     admin_group = admin_cog.admin  # type:ignore
+    if not cache_commands_task.is_running():
+        cache_commands_task.start()
 
     @commands.is_owner()
     @admin_group.command(name="sync", description="syncs app commands")
-    async def sync(ctx: commands.Context, flags: str = ""):
-        # get it flagl because flags and the s is string and l is list hahaha
-        flagl = list(flags.strip("-"))
-        e = discord.Embed(
-            title=f"successfully synced {len(tree.get_commands())} commands for all guilds!",
-            color=Color.positive,
+    async def sync(ctx: commands.Context, flags: str | Any = ""):
+        flags = parse_flags(flags)
+        suffix = ""
+        local_sync = flags.get("l") or flags.get("L")
+        global_sync = flags.get("G") or flags.get("g")
+        forced = flags.get("f")
+
+        logger.debug(
+            f"attempting sync; local: {local_sync}; global: {global_sync}; forced: {forced}"
         )
-        e1 = discord.Embed(
-            title=f"successfully synced {len(tree.get_commands())} commands for this guild!",
-            color=Color.positive,
-        )
-        # used for when you want to sync globally but still have the guild first
-        e2 = discord.Embed(
-            title=f"successfully synced {len(tree.get_commands())} commands for this guild and all guilds!",
-            color=Color.positive,
-        )
-        embed: discord.Embed
-        if "g" in flagl:
-            embed = e
-            await tree.sync()
-            logger.info("syncing global")
-        elif "g" in flagl and "a" in flagl:
-            embed = e2
+        if (not local_sync and not global_sync) or not flags:
+            e = Message(
+                message="## usage \nflags:\n- -l: sync locally\n- -G: sync globally (for all servers)\n- -f: force (allow global sync)",
+                accent_color=Color.negative,
+            )
+            await ctx.reply(view=e, ephemeral=True, mention_author=False)
+
+            return
+        if global_sync and not forced:
+            e = Message(
+                message="## failed \ncannot sync globally without the `-f` flag",
+                accent_color=Color.negative,
+            )
+            await ctx.reply(view=e, ephemeral=True, mention_author=False)
+            return
+        if local_sync:
             await tree.sync(guild=ctx.guild)
+            suffix += "this"
+        if not global_sync:
+            suffix += " server"
+        if global_sync:
+            if local_sync:
+                suffix += " and"
+            suffix += " all servers"
             await tree.sync()
-            logger.info("syncing guild and global")
-        else:
-            embed = e1
-            await tree.sync(guild=ctx.guild)
-            logger.info("syncing guild")
-        await ctx.reply(embed=embed, ephemeral=True, mention_author=False)
+            await cache_commands(client)
 
-    start_time = time.time()
-
-    # async def run_quart():
-    #     pass
-    #     # await app.run_task(host="0.0.0.0", port=4888) #todo allow changing port
-
-    # async def main():
-    #     await asyncio.gather(run_quart(), ) and cog_name != "admin"
+        e = Message(
+            message=f"# success\n{len(client.full_commands)} commands synced for `{suffix}`.",
+            accent_color=Color.positive,
+        )
+        await ctx.reply(view=e, ephemeral=True, mention_author=False)
 
 
-@tasks.loop(seconds=5.0)
-async def heartbeart(self):
-    # logger.debug("heartbeat ping")
-    return
+@tasks.loop(seconds=15.0)
+async def cache_commands_task():
+    try:
+        async with aiofiles.open(".last_command_cache", "r") as f:
+            content = await f.read()
+        last_cache = json.loads(content).get("time")
+        if not last_cache:
+            raise ValueError("no cache found")
+        if datetime.datetime.fromtimestamp(
+            last_cache
+        ) < datetime.datetime.now() - datetime.timedelta(days=1):
+            logger.debug("caching commands - last cache was over a day ago")
+            await cache_commands(client)
+    except Exception:
+        last_cache = int(time.time())
+        logger.debug("caching commands - no cache file found")
+        await cache_commands(client)
 
 
 def main():

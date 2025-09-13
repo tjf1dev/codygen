@@ -4,6 +4,12 @@ class CodygenError(Exception):
         self.message = message
 
 
+class CodygenUserError(CodygenError):
+    """user-facing error. displays a nice error message"""
+
+    pass
+
+
 class DefaultError(CodygenError):
     pass
 

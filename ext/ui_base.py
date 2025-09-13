@@ -5,8 +5,8 @@ from discord.ui import LayoutView, Container, TextDisplay
 
 
 class Message(LayoutView):
-    def __init__(self, message: str, color: Any = None, **container_settings: Any):
+    def __init__(self, message: str, **container_settings: Any):
         super().__init__()
-        container = Container(accent_color=color, **container_settings)
+        container = Container(**container_settings)
         self.add_item(container)
         container.add_item(TextDisplay(message))

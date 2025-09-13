@@ -5,7 +5,7 @@ from discord import app_commands
 from PIL import Image
 from io import BytesIO
 from ext.logger import logger
-from ext.views import UserInfo, ServerInfo
+from views import UserInfoLayout, ServerInfoLayout
 from ext.utils import parse_commands
 from ext.ui_base import Message
 
@@ -44,16 +44,16 @@ class info(commands.Cog):
         if not user:
             user = ctx.author
         await ctx.reply(
-            view=UserInfo(user),
+            view=UserInfoLayout(user),
             mention_author=False,
             allowed_mentions=discord.AllowedMentions.none(),
         )
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @info.command(
-        name="guild",
+        name="server",
         description="view information about the current server",
-        aliases=["server"],
+        aliases=["guild"],
     )
     async def guild(self, ctx: commands.Context):
         guild = ctx.guild
@@ -82,7 +82,7 @@ class info(commands.Cog):
                     other_channels.append(c)
 
         await ctx.reply(
-            view=ServerInfo(
+            view=ServerInfoLayout(
                 guild,
                 len(roles),
                 len(channels),

@@ -2,11 +2,10 @@ import base64
 import datetime
 import aiohttp
 from ext.logger import logger
-
+import os
+import sys
 import discord
-from typing import AsyncGenerator
-from ext.colors import Color
-import asyncio
+from typing import Tuple, Optional, Any, List
 
 
 def state_to_id(state: str) -> str:
@@ -14,6 +13,9 @@ def state_to_id(state: str) -> str:
     return base64.b64decode(euid).decode()
 
 
+# TODO add custom value support
+# TODO allow detailed command descriptions, with examples, previews, etc.
+# TODO make the output the same for each command, and less messy
 def parse_commands(commands, bot=None) -> list[dict]:
     """
     Formats commands into a nice list
@@ -171,7 +173,7 @@ def iso_to_unix(iso_str: str) -> int:
     return int(dt.timestamp())
 
 
-def timestamp(unix: str, mode: str = "R", inf_text: str = "never") -> str:
+def timestamp(unix: str | int | float, mode: str = "R", inf_text: str = "never") -> str:
     """
     Converts a unix timestamp into a Discord timestamp
     """
@@ -302,11 +304,116 @@ def parse_flags(s: str) -> dict[str, str | bool]:
                 i += 1
             flags[key] = value
         elif t.startswith("-"):
-            key = t[1:]
-            value = True
-            if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
-                value = parts[i + 1]
-                i += 1
-            flags[key] = value
+            keys = list(t[1:])
+            for key in keys:
+                value = True
+                if i + 1 < len(parts) and not parts[i + 1].startswith("-"):
+                    value = parts[i + 1]
+                    i += 1
+                flags[key] = value
         i += 1
     return flags
+
+
+def get_message_code(
+    message: discord.Message,
+) -> Tuple[
+    int,
+    Optional[Any],
+    Optional[str],
+    Optional[List[discord.Attachment]],
+    Optional[discord.Message | Any],
+]:
+    """
+    Returns a tuple describing the message:
+    0: type code
+        0 = content only
+        1 = embeds + content
+        2 = embeds only
+        3 = attachments only
+        4 = embeds + attachments
+        5 = content + attachments
+        6 = embeds + content + attachments
+    1: embeds or None
+    2: content or None
+    3: attachments list or None
+    4: replied_to message or None
+    """
+    embeds = message.embeds if message.embeds else None
+    content = message.content if message.content else None
+    attachments = message.attachments if message.attachments else None
+    replied = message.reference.resolved if message.reference else None
+    code = 0
+    if embeds and content and attachments:
+        code = 6
+    elif embeds and content:
+        code = 1
+    elif embeds and attachments:
+        code = 4
+    elif content and attachments:
+        code = 5
+    elif embeds:
+        code = 2
+    elif attachments:
+        code = 3
+    elif content:
+        code = 0
+    return code, embeds, content, attachments, replied
+
+
+def describe_message(message: discord.Message) -> str:
+    """
+    returns a user-friendly description of a discord.Message
+    """
+    parts = []
+
+    if message.content:
+        parts.append(f"```{message.content}```")
+
+    if message.embeds:
+        parts.append(f"-# Embeds: `{len(message.embeds)}`")
+
+    if message.attachments:
+        attach_list = ", ".join(a.filename for a in message.attachments)
+        parts.append(f"-# Attachments ({len(message.attachments)}): `{attach_list}`")
+
+    if not parts:
+        return "-# [empty / unable to load]"
+
+    return "\n".join(parts)
+
+
+def get_required_env() -> list:
+    r = []
+    with open(".env.template", "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            if line.startswith("#") or not line or line == "\n":
+                continue
+            r.append(line.split("=")[0])
+    return r
+
+
+def ensure_env():
+    """
+    Checks that all REQUIRED_ENV keys exist and are non-empty.
+    (so the user can copy it to .env and fill in real values),
+    then exits with a meaningful message.
+    """
+    missing = []
+    REQUIRED_ENV = get_required_env()
+    for key in REQUIRED_ENV:
+        val = os.getenv(key)
+        if not val:
+            missing.append(key)
+
+    if missing:
+        logger.error(
+            "Missing environment variables: "
+            + ", ".join(missing)
+            + "\nA `.env.template` file has been created.\n"
+            + "→ Copy it to `.env` and fill in the real values before restarting.\n"
+            + "For more details on how to configure the bot, please refer to the official documentation:\n"
+            + "https://github.com/tjf1dev/codygen#self-hosting."
+        )
+        sys.exit(1)
