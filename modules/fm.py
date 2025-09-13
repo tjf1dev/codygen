@@ -14,6 +14,7 @@ from main import Color, logger
 import aiofiles
 from ext.ui_base import Message
 import ext.errors
+from typing import cast
 
 
 async def get_average_color(url):
@@ -35,7 +36,7 @@ class fmSection(discord.ui.Section):
         super().__init__(accessory=accessory)
         display_text = (
             f"## [{track_info['track']}]({track_info['url']})\n"
-            f"{track_info['artist']} {"• " if track_info.get('album', None) else ""}{track_info.get('album', '')}\n"
+            f"{track_info['artist']} {'• ' if track_info.get('album', None) else ''}{track_info.get('album', '')}\n"
             f"{track_info['track_scrobble_count']} scrobbles, "
             f"{track_info['scrobble_count']} total"
         )
@@ -58,20 +59,27 @@ class fmActionRow(discord.ui.ActionRow):
     ):
         await interaction.response.defer()
         user_id = interaction.user.id
-        upvote_button = next(b for b in self.children if b.emoji.name == "upvote")
+        buttons = [cast(discord.ui.Button, b) for b in self.children]
+        upvote_button = next(
+            b for b in buttons if b.emoji and getattr(b.emoji, "name", None) == "upvote"
+        )
 
         current_vote = self.voted_users.get(user_id)
 
         if current_vote == "down":
             self.voted_users.pop(user_id)
-            button.label = str(int(button.label) - 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) - 1)
         elif current_vote == "up":
             self.voted_users[user_id] = "down"
-            button.label = str(int(button.label) + 1)
-            upvote_button.label = str(int(upvote_button.label) - 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) + 1)
+            old_upvote_label = upvote_button.label or "0"
+            upvote_button.label = str(int(old_upvote_label) - 1)
         else:
             self.voted_users[user_id] = "down"
-            button.label = str(int(button.label) + 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) + 1)
 
         await interaction.edit_original_response(view=self.view)
 
@@ -84,23 +92,28 @@ class fmActionRow(discord.ui.ActionRow):
         await interaction.response.defer()
         user_id = interaction.user.id
 
-        downvote_button = next(b for b in self.children if b.emoji.name == "downvote")
-
+        buttons = [cast(discord.ui.Button, b) for b in self.children]
+        downvote_button = next(
+            b
+            for b in buttons
+            if b.emoji and getattr(b.emoji, "name", None) == "downvote"
+        )
         current_vote = self.voted_users.get(user_id)
 
         if current_vote == "up":
-            # if interaction.user.id == 978596696156147754:
-            #     button.label = str(int(button.label) + 100)
-            #     return
             self.voted_users.pop(user_id)
-            button.label = str(int(button.label) - 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) - 1)
         elif current_vote == "down":
             self.voted_users[user_id] = "up"
-            button.label = str(int(button.label) + 1)
-            downvote_button.label = str(int(downvote_button.label) - 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) + 1)
+            old_down_label = downvote_button.label or "0"
+            downvote_button.label = str(int(old_down_label) - 1)
         else:
             self.voted_users[user_id] = "up"
-            button.label = str(int(button.label) + 1)
+            old_label = button.label or "0"
+            button.label = str(int(old_label) + 1)
 
         await interaction.edit_original_response(view=self.view)
 
@@ -149,8 +162,8 @@ class lastfmLoggedOutError(discord.ui.LayoutView):
         container.add_item(
             discord.ui.TextDisplay("## Not logged in!\nAuthorize with the button below")
         )
-        container.add_item(lastfmAuthPromptActionRow)
-        self.add_item()
+        container.add_item(lastfmAuthPromptActionRow())
+        self.add_item(container)
 
 
 class lastfmAuthFinalActionRow(discord.ui.ActionRow):
@@ -179,7 +192,10 @@ class lastfmAuthFinal(discord.ui.LayoutView):
 
 
 def generate_full_state(user_id: int) -> str:
-    hash = generate_state_hash(user_id, os.getenv("STATE_SALT"))
+    salt = os.getenv("STATE_SALT")
+    if not salt:
+        raise ext.errors.MissingEnvironmentVariable("STATE_SALT")
+    hash = generate_state_hash(user_id, salt)
     id_enc = base64.b64encode(str(user_id).encode()).decode()
     return f"{id_enc}@{hash}"
 
@@ -195,8 +211,11 @@ class fm(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = (
-            "Use your Last.fm integration to check what you're listening to."
+            "use your Last.fm integration to check what you're listening to."
         )
+
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
 
     async def fetch_now_playing(self, username, raw: bool = False):
         """Fetches the currently playing track, scrobble count, and track play count for a Last.fm user."""
@@ -373,21 +392,13 @@ class fm(commands.Cog):
             if not track_info_raw:
                 raise ext.errors.LastfmLoggedOutError()
             else:
-                track_info = track_info_raw[0]
-            # Create embed with track scrobble count
-            # e = discord.Embed(
-            #     description=f"## [{track_info['track']}]({track_info['url']})\n### by {track_info['artist']}, on {track_info['album']}\n{track_info['track_scrobble_count']} scrobbles • {track_info['scrobble_count']} total",
-            #     color=Color.lblue,
-            # )
-            # e.set_author(name=f"{ctx.author.name}", icon_url=ctx.author.avatar.url)
-
+                track_info = cast(dict, track_info_raw[0])
+            if not ctx.interaction:
+                logger.warning("interaction doesnt exist for some reason")
+                return
             await ctx.reply(
                 view=fmLayout(ctx.interaction, track_info), mention_author=False
             )
-            # if ctx.guild is None:
-            #     msg = await ctx.interaction.original_response()
-            #     await msg.add_reaction("<:upvote:1388512426059759657>")
-            #     await msg.add_reaction("<:downvote:1388512428484198482>")
         except FileNotFoundError:
             view = lastfmMessageWithLogin(
                 "## Not logged in!\nPlease use the button below to authenticate with Last.fm"

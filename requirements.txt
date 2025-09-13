@@ -1,5 +1,5 @@
 requests
-git+https://github.com/DA-344/d.py@feat/components-v2
+git+https://github.com/Rapptz/discord.py
 python-dotenv 
 quart
 aiofiles
@@ -9,5 +9,7 @@ colorama
 jishaku
 pillow
 python-dateutil
-sqlite3
 aiosqlite
+discord-ext-ipcx
+quartcord
+quart_cors

@@ -4,8 +4,6 @@
 // admins: list of user ids (ints)
 // tip: json does not like comments!
 {
-    "version": "your-desired-version",
-    "github":"tjf1dev/codygen",
     "default_prefix":">"
     "admins": [
     ],
@@ -16,7 +14,7 @@
     },
     "commands": {
         "credits":{
-            "repo":"tjf1dev/codygen"
+            "repo":"https://github.com/tjf1dev/codygen"
         },
         "awawawa": {
             "words": [
@@ -74,6 +72,11 @@
                 "wokemeter":{
                     "woke_min": "0",
                     "woke_max": "100"
+                },
+                "ship":{
+                    "exceptions":{
+                        "100":[]
+                    }
                 }
             },
             "prefix": {

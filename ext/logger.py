@@ -2,6 +2,7 @@ import logging
 import os
 import datetime
 from colorama import Fore
+from typing import cast
 
 
 class ColorFormatter(logging.Formatter):
@@ -25,13 +26,14 @@ OK_LEVEL = 25
 logging.addLevelName(OK_LEVEL, "OK")
 
 
-def ok(self, message, *args, **kwargs):
-    if self.isEnabledFor(OK_LEVEL):
-        self._log(OK_LEVEL, message, args, stacklevel=2, **kwargs)
+class ExtLogger(logging.Logger):
+    def ok(self, message, *args, **kwargs):
+        if self.isEnabledFor(OK_LEVEL):
+            self._log(OK_LEVEL, message, args, stacklevel=2, **kwargs)
 
 
-logging.Logger.ok = ok
-logger = logging.getLogger(__name__)
+logging.setLoggerClass(ExtLogger)
+logger = cast(ExtLogger, logging.getLogger(__name__))
 if logger.hasHandlers():
     logger.handlers.clear()
 
@@ -51,6 +53,7 @@ file_formatter = logging.Formatter(
     "%(asctime)s [ %(levelname)s ] %(message)s: (%(funcName)s)",
     datefmt="%d/%m/%Y %H:%M:%S",
 )
+
 discord_logger = logging.getLogger("discord")
 discord_logger.setLevel(logging.INFO)
 logging.getLogger("discord.http").setLevel(logging.INFO)

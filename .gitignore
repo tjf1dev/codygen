@@ -25,3 +25,17 @@ logs
 
 modules/tests.py
 *.db
+*.db.backup
+*.db-wal
+*.db-shm
+
+node_modules
+.last_command_cache
+
+# vitepress
+dist
+theme
+package-lock.json
+
+# this file is auto-generated before build
+commands.md

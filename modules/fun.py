@@ -1,19 +1,14 @@
-from main import (
-    verify,
-    request,
-    request_with_json,
-    get_global_config,
-    get_guild_config,
-    words,
-)
+from main import get_global_config
 import discord
 import requests
-import aiohttp
+import aiosqlite
+import hashlib
 import random
-import csv
+from typing import cast
 from discord.ext import commands
 from ext.colors import Color
 from ext.logger import logger
+from discord import app_commands
 
 
 class fun(commands.Cog):
@@ -21,8 +16,13 @@ class fun(commands.Cog):
         self.bot = bot
         self.description = "fun commands!"
 
+    async def cog_load(self):
+        logger.ok(f"loaded {self.__class__.__name__}")
+
     @commands.hybrid_group(
-        name="fun", description="fun commands!", invoke_without_command=True
+        name="fun",
+        description="fun commands!",
+        invoke_without_command=True,  # type: ignore
     )
     async def fun_group(self, ctx: commands.Context):
         pass
@@ -31,147 +31,155 @@ class fun(commands.Cog):
     async def on_ready(self):
         logger.info(f"{self.__class__.__name__}: loaded.")
 
-    @verify()
-    @fun_group.command(name="ship", description="SHIP TWO PEOPLE")
+    @fun_group.command(name="ship", description="ship two people")  # type: ignore
+    @app_commands.describe(
+        user1="users to ship", user2="users to ship (defaults to you)"
+    )
     async def ship(
         self,
         ctx: commands.Context,
-        user1: discord.User = None,
-        user2: discord.User = None,
+        user1: discord.User,
+        user2: discord.User | discord.Member | None = None,
     ):
         if user2 is None:
             user2 = ctx.author
+
         # name1 = user1.name
         # name2 = user2.name
-        ship = str(random.randint(0, 100))
-        exceptions_100 = [
-            [1201995223996321886, 1191871707577864203],
-            [978596696156147754, 1201995223996321886],
-        ]
+        def generate_number_from_strings(str1, str2):
+            combined = str1 + str2
+            hash_object = hashlib.sha256(combined.encode())
+            hex_digest = hash_object.hexdigest()
+            int_value = int(hex_digest, 16)
+            number = (int_value % 100) + 1  # Maps to 1-100
+            return number
 
-        def is_exception(id):
-            for e in exceptions_100:
-                if id in e:
-                    return True
-
+        ship = str(generate_number_from_strings(user1.name, user2.name))
+        exceptions = {
+            (1201995223996321886, 1191871707577864203): 100,
+            (978596696156147754, 1201995223996321886): 100,
+            (1379503145658486994, 1337509693874245682): 100,
+        }
         if user1 == user2:
             ship = 100
-        if is_exception(user1.id) and is_exception(user2.id):
-            ship = 100
+        value = (
+            exceptions.get((user1.id, user2.id))
+            or exceptions.get((user2.id, user1.id))
+            or ship
+        )
         embed = discord.Embed(
             title="ship",
-            description=f"ship between {user1.mention} and {user2.mention} is {ship}%",
+            description=f"ship between {user1.mention} and {user2.mention} is {value}%",
             color=Color.accent_og,
         )
         await ctx.reply(embed=embed)
 
-    @verify()
-    @fun_group.command(name="awawawa", description="awawawawawawa")
-    async def awawawa(self, ctx: commands.Context):
-        await ctx.reply(random.choice(words), ephemeral=True)
+    # @verify()
+    # @fun_group.command(name="awawawa", description="awawawawawawa")
+    # async def awawawa(self, ctx: commands.Context):
+    #     await ctx.reply(random.choice(words), ephemeral=True)
 
-    @verify()
-    @fun_group.command(
-        name="randomword",
-        description="get random word from the english dictionary and it's definition",
-    )
-    async def randomword(self, ctx: commands.Context):
-        if ctx.interaction:
-            await ctx.interaction.response.defer()
-        with open("assets/randomword.txt", "r") as file:
-            text = file.read()
-            words = list(map(str, text.split()))
-            word_found = False
-            iteration = 0
-            while not word_found:
-                iteration += 1
-                if iteration >= 5:
-                    word_found = True
-                word = random.choice(words)
-                entry: list | dict = await request_with_json(
-                    f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
-                )
-                if isinstance(entry, dict):
-                    if (
-                        entry.get("title", None).strip().lower()
-                        == "no definitions found"
-                    ):
-                        entry = None
-                if entry:
-                    word_found = True
-                    meanings = entry[0].get("meanings", [{}])
-                    first_meaning = meanings[0]
-                    partOfSpeech = first_meaning.get("partOfSpeech", "unknown")
-                    definitions = first_meaning.get("definitions", [{}])
-                    first_definition = definitions[0].get("definition", "")
-                    e = discord.Embed(
-                        description=f"# {word}\n"
-                        f"-# as {partOfSpeech}: \n"
-                        f"**`{first_definition}`**\n-# for more definitions of this word, check </fun word:1367182065564520484>"
-                    )
-                if not entry:
-                    e = discord.Embed(
-                        description=f"# {word}\ncouldn't even find a definition for this one."
-                    )
-        await ctx.reply(embed=e)
+    # @verify()
+    # @fun_group.command(
+    #     name="randomword",
+    #     description="get random word from the english dictionary and it's definition",
+    # )
+    # async def randomword(self, ctx: commands.Context):
+    #     if ctx.interaction:
+    #         await ctx.interaction.response.defer()
+    #     with open("assets/randomword.txt", "r") as file:
+    #         text = file.read()
+    #         words = list(map(str, text.split()))
+    #         word_found = False
+    #         iteration = 0
+    #         while not word_found:
+    #             iteration += 1
+    #             if iteration >= 5:
+    #                 word_found = True
+    #             word = random.choice(words)
+    #             entry: list | dict = await request_with_json(
+    #                 f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+    #             )
+    #             if isinstance(entry, dict):
+    #                 if (
+    #                     entry.get("title", None).strip().lower()
+    #                     == "no definitions found"
+    #                 ):
+    #                     entry = None
+    #             if entry:
+    #                 word_found = True
+    #                 meanings = entry[0].get("meanings", [{}])
+    #                 first_meaning = meanings[0]
+    #                 partOfSpeech = first_meaning.get("partOfSpeech", "unknown")
+    #                 definitions = first_meaning.get("definitions", [{}])
+    #                 first_definition = definitions[0].get("definition", "")
+    #                 e = discord.Embed(
+    #                     description=f"# {word}\n"
+    #                     f"-# as {partOfSpeech}: \n"
+    #                     f"**`{first_definition}`**\n-# for more definitions of this word, check </fun word:1367182065564520484>"
+    #                 )
+    #             if not entry:
+    #                 e = discord.Embed(
+    #                     description=f"# {word}\ncouldn't even find a definition for this one."
+    #                 )
+    #     await ctx.reply(embed=e)
 
-    @fun_group.command(name="word", description="get definition of an english word")
-    async def word(self, ctx: commands.Context, *, word: str):
-        entry: list | dict = await request_with_json(
-            f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
-        )
-        found = False
-        embeds = []
-        if isinstance(entry, dict):
-            if entry.get("title", None).strip().lower() == "no definitions found":
-                entry = None
-        if entry:
-            found = True
-            meanings = entry[0].get("meanings", [{}])
-            e1 = discord.Embed(
-                description=f"# {word}\nfound {len(meanings)} meanings for this word."
+    # @fun_group.command(name="word", description="get definition of an english word")
+    # @app_commands.describe(word="the word to get a definition of")
+    # async def word(self, ctx: commands.Context, *, word: str):
+    #     entry: list | dict = await request_with_json(
+    #         f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
+    #     )
+    #     found = False
+    #     embeds = []
+    #     if isinstance(entry, dict):
+    #         if entry.get("title", None).strip().lower() == "no definitions found":
+    #             entry = None
+    #     if entry:
+    #         found = True
+    #         meanings = entry[0].get("meanings", [{}])
+    #         e1 = discord.Embed(
+    #             description=f"# {word}\nfound {len(meanings)} meanings for this word."
+    #         )
+    #         if meanings == [{}]:
+    #             found = False
+    #         embeds.append(e1)
+    #         for m in meanings:
+    #             partOfSpeech = m.get("partOfSpeech", "unknown")
+    #             definitions = m.get("definitions", [{}])
+    #             desc = f"-# as {partOfSpeech}\n"
+    #             for d in definitions:
+    #                 definition = d.get("definition")
+    #                 desc += f"**`{definition}`**\n\n"
+    #             e = discord.Embed(description=desc)
+    #             embeds.append(e)
+    #     if not entry:
+    #         e = discord.Embed(description="couldn't find a definition for this word.")
+    #         embeds.append(e)
+    #     await ctx.reply(embeds=embeds, ephemeral=False if found else True)
+
+    @fun_group.command(name="wokemeter", description="see how WOKE someone is!")  # type: ignore
+    @app_commands.describe(user="the user to check")
+    async def wokemeter(
+        self, ctx: commands.Context, user: discord.User | discord.Member | None = None
+    ):
+        if ctx.guild:
+            con: aiosqlite.Connection = self.bot.db
+            cur: aiosqlite.Cursor = await con.cursor()
+            res = await cur.execute(
+                "SELECT wokemeter_min, wokemeter_max FROM guild_commands WHERE guild_id=?",
+                (ctx.guild.id,),
             )
-            if meanings == [{}]:
-                found = False
-            embeds.append(e1)
-            for m in meanings:
-                partOfSpeech = m.get("partOfSpeech", "unknown")
-                definitions = m.get("definitions", [{}])
-                desc = f"-# as {partOfSpeech}\n"
-                for d in definitions:
-                    definition = d.get("definition")
-                    desc += f"**`{definition}`**\n\n"
-                e = discord.Embed(description=desc)
-                embeds.append(e)
-        if not entry:
-            e = discord.Embed(description="couldn't find a definition for this word.")
-            embeds.append(e)
-        await ctx.reply(embeds=embeds, ephemeral=False if found else True)
+            row = cast(tuple, await res.fetchone())
+            if row:
+                woke_min, woke_max = row[0], row[1]
+            else:
+                woke_min, woke_max = 0, 100
 
-    @verify()
-    @fun_group.command(name="cute", description="cute command")
-    async def cute(configself, ctx: commands.Context, user: discord.User = None):
-        if user:
-            await ctx.reply(f"{user.mention} is cute and silly :3")
         else:
-            await ctx.reply("you are cute and silly :3", ephemeral=True)
-
-    @verify()
-    @fun_group.command(name="wokemeter", description="see how WOKE someone is!")
-    async def wokemeter(self, ctx: commands.Context, user: discord.User = None):
-        config = await get_guild_config(ctx.guild.id)
-        woke = config["commands"]["wokemeter"]
-        woke_min = woke["woke_min"]
-        woke_max = woke["woke_max"]
-        exceptions = woke["exceptions"]
+            woke_min, woke_max = 0, 100
         if user is None:
             user = ctx.author
-        if str(user.id) in exceptions.keys():
-            await ctx.reply(f"{user.mention} is **{exceptions[str(user.id)]}%** woke")
-            return
-        elif user.id == 1266572586528280668:
-            await ctx.reply(f"{user.mention} is **wamz** woke")
-            return
         if user.bot:
             await ctx.reply("bots cant be woke :broken_heart:")
             return
@@ -181,46 +189,49 @@ class fun(commands.Cog):
             )
             return
 
-    @verify()
-    @fun_group.command(name="wokegame", description="Check is the game woke!")
-    async def wokegame(self, ctx: commands.Context, game: str):
-        with open("assets/wokegames.csv", mode="r", encoding="utf-8") as wokelist:
-            csvFile = csv.DictReader(wokelist)
-            color = 0x0000
-            game_lower = game.lower()
-            for lines in csvFile:
-                if game_lower in lines["name"].lower():
-                    appID = lines["appid"]
-                    name = lines["name"]
-                    banner = lines["banner"]
-                    wokeness = str(lines["woke"])
-                    description = lines["description"]
-                    if wokeness == "-1":
-                        rate = "Very woke!"
-                        color = Color.positive
-                    elif wokeness == "0":
-                        rate = "Slightly woke!"
-                        color = Color.lyellow
-                    elif wokeness == "1":
-                        rate = "Not woke!"
-                        color = Color.negative
-                    else:
-                        rate = "How the fuck did that happen"
-                    embed = discord.Embed(
-                        title=rate, description=description, color=color
-                    )
-                    embed.set_footer(text=f"{name}, {appID}")
-                    embed.set_image(url=banner)
-                    await ctx.send(embed=embed)
-                    return
-            fail = discord.Embed(title="cant find the game", color=Color.negative)
-            await ctx.send(embed=fail)
+    # @verify()
+    # @fun_group.command(name="wokegame", description="Check is the game woke!")
+    # async def wokegame(self, ctx: commands.Context, game: str):
+    #     with open("assets/wokegames.csv", mode="r", encoding="utf-8") as wokelist:
+    #         csvFile = csv.DictReader(wokelist)
+    #         color = 0x0000
+    #         game_lower = game.lower()
+    #         for lines in csvFile:
+    #             if game_lower in lines["name"].lower():
+    #                 appID = lines["appid"]
+    #                 name = lines["name"]
+    #                 banner = lines["banner"]
+    #                 wokeness = str(lines["woke"])
+    #                 description = lines["description"]
+    #                 if wokeness == "-1":
+    #                     rate = "Very woke!"
+    #                     color = Color.positive
+    #                 elif wokeness == "0":
+    #                     rate = "Slightly woke!"
+    #                     color = Color.lyellow
+    #                 elif wokeness == "1":
+    #                     rate = "Not woke!"
+    #                     color = Color.negative
+    #                 else:
+    #                     rate = "How the fuck did that happen"
+    #                 embed = discord.Embed(
+    #                     title=rate, description=description, color=color
+    #                 )
+    #                 embed.set_footer(text=f"{name}, {appID}")
+    #                 embed.set_image(url=banner)
+    #                 await ctx.send(embed=embed)
+    #                 return
+    #         fail = discord.Embed(title="cant find the game", color=Color.negative)
+    #         await ctx.send(embed=fail)
 
-    @verify()
-    @fun_group.command(name="guess", description="Guess the user by pfp!")
+    @app_commands.allowed_contexts(guilds=True, dms=False)
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @fun_group.command(name="guess", description="Guess the user by pfp!")  # type: ignore
     async def guess(self, ctx: commands.Context):
         global guessUser
         global guessUserDisplay
+        if not ctx.guild:
+            return
         users = ctx.guild.members
         while True:
             user = random.choice(users)
@@ -285,8 +296,8 @@ class fun(commands.Cog):
     #             raz = "times"
     #         embed.add_field(name=f"{x}. {user}", value=f"Guessed {value} {raz}.")
     #     await ctx.send(embed=embed)
-    @verify()
-    @fun_group.command(name="cat", description="get a random pic of a cat :3")
+
+    @fun_group.command(name="cat", description="get a random pic of a cat :3")  # type: ignore
     async def cat(self, ctx: commands.Context):
         url = get_global_config()["commands"]["cat"]["url"]
         req = requests.get(url)
@@ -300,13 +311,15 @@ class guessNewGame(discord.ui.View):
         super().__init__(timeout=None)
 
     @discord.ui.button(
-        label="New Game", style=discord.ButtonStyle.green, custom_id="new_game"
+        label="new game", style=discord.ButtonStyle.green, custom_id="new_game"
     )
     async def new_game(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         global guessUser
         global guessUserDisplay
+        if not interaction.guild:
+            return
         users = interaction.guild.members
         while True:
             user = random.choice(users)
@@ -351,19 +364,24 @@ class Questionnaire(discord.ui.Modal, title="Guess the user!"):
             embed = discord.Embed(color=Color.positive)
             embed.add_field(name="Correct!", value=" ", inline=True)
             embed.set_author(
-                name=interaction.user.name + f" tried: {guessOG}",
-                icon_url=interaction.user.avatar.url,
+                name=f"{interaction.user.name} tried: {guessOG}",
+                icon_url=(
+                    interaction.user.avatar.url if interaction.user.avatar else None
+                ),
             )
+
             # Stop the guessButtons view (cancelling its timeout)
             self.view.stop()
             # Send a new game message
             await interaction.response.send_message(embed=embed, view=guessNewGame())
         else:
             embed = discord.Embed(color=Color.negative)
-            embed.add_field(name="Wrong!", value=" ", inline=True)
+            embed.add_field(name="wrong!", value=" ", inline=True)
             embed.set_author(
                 name=interaction.user.name + f" tried: {guessOG}",
-                icon_url=interaction.user.avatar.url,
+                icon_url=(
+                    interaction.user.avatar.url if interaction.user.avatar else None
+                ),
             )
             await interaction.response.send_message(embed=embed)
 
@@ -377,16 +395,17 @@ class guessButtons(discord.ui.View):
 
     async def on_timeout(self):
         for child in self.children:
-            child.disabled = True
+            button = cast(discord.ui.Button, child)
+            button.disabled = True
         e = discord.Embed(
-            title="Time's up!",
-            description=f"The user was... {self.guess_user}",
+            title="time's up!",
+            description=f"the user was... {self.guess_user}",
             color=Color.negative,
         )
         await self.interaction.message.edit(view=self)
         await self.interaction.followup.send(embed=e)
 
-    @discord.ui.button(label="Guess", style=discord.ButtonStyle.red)
+    @discord.ui.button(label="guess", style=discord.ButtonStyle.red)
     async def confirm(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):

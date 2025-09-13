@@ -1,0 +1,7 @@
+{
+  "scripts": {
+    "docs:dev": "node make_command_page.js && vitepress dev",
+    "docs:build": "node make_command_page.js && vitepress build",
+    "docs:preview": "vitepress preview"
+  }
+}

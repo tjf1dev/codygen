@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+import json
+import typer
+import pathlib
+from rich.console import Console
+from rich.panel import Panel
+from ext.config import DEFAULT_CONFIG
+from typing import Annotated
+from main import main as start_codygen
+# original cli tool from https://github.com/tjf1dev/protochat
+
+
+VERSION = open("VERSION", "r").read()
+console = Console()
+
+app = typer.Typer()
+db = typer.Typer()
+
+
+@app.callback(invoke_without_command=True)
+def main(ctx: typer.Context):
+    if ctx.invoked_subcommand is None:
+        console.print(
+            Panel(
+                f"[purple bold]codygen {VERSION}[/purple bold]",
+                border_style="purple",
+            )
+        )
+        console.print(
+            Panel(
+                "[yellow]provide a command first. please use './codygen setup' before any other commands[/yellow]",
+                border_style="yellow",
+            )
+        )
+
+
+@app.command()
+def setup(force: Annotated[bool, typer.Option("--force", "-f")] = False):
+    if pathlib.Path("config.json").exists() and not force:
+        console.print(
+            Panel(
+                "[yellow]a config file already exists! no changes have been made, use -f to make a config anyway[/yellow]",
+                border_style="yellow",
+            )
+        )
+        return
+    console.print(Panel("creating a config..."))
+    json.dump(DEFAULT_CONFIG, open("config.json", "w"), indent=2)
+    console.print(
+        Panel(
+            f"[green]...done!\n[cyan]{json.dumps(DEFAULT_CONFIG, indent=2)}[/cyan]\nstart codygen with ./codygen run[/green]",
+            border_style="green",
+        )
+    )
+
+
+@app.command()
+def run():
+    start_codygen()
+
+
+if __name__ == "__main__":
+    app()

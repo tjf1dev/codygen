@@ -4,31 +4,32 @@ import time
 import os
 import aiofiles
 import asyncio
+import sys
 
 DB_FILE = "codygen.db"
-config_ver = 1001
+config_ver = 1003
 
 
 async def create_table():
     async with aiosqlite.connect(DB_FILE) as con:
         await con.execute(
-            """CREATE TABLE IF NOT EXISTS guilds (
+            f"""--sql
+            CREATE TABLE IF NOT EXISTS guilds (
                 guild_id INTEGER PRIMARY KEY,
                 prefix TEXT DEFAULT '>',
-                prefix_enabled BOOLEAN,
-                level_per_message INTEGER DEFAULT 10,
+                prefix_enabled BOOLEAN DEFAULT 1,
+                level_per_message INTEGER DEFAULT 0,
                 levelup_channel INTEGER,
-                config_ver INTEGER DEFAULT {},
+                logging_settings TEXT DEFAULT '{{}}',
+                config_ver INTEGER DEFAULT {config_ver},
                 timestamp REAL
-            )""".format(
-                config_ver
-            )
+            )"""
         )
         await con.execute(
             """CREATE TABLE IF NOT EXISTS guild_commands (
                 guild_id INTEGER PRIMARY KEY,
-                wokemeter_min INTEGER,
-                wokemeter_max INTEGER
+                wokemeter_min INTEGER DEFAULT 0,
+                wokemeter_max INTEGER DEFAULT 100
             )"""
         )
         await con.execute(
@@ -55,14 +56,59 @@ async def create_table():
                 )"""
         )
         await con.execute(
+            """CREATE TABLE IF NOT EXISTS level_rewards (
+                guild_id INTEGER,
+                level INTEGER,
+                reward_id INTEGER,
+                PRIMARY KEY (guild_id, level, reward_id)
+            );
+            """
+        )
+        await con.execute(
             """CREATE TABLE IF NOT EXISTS users (
-                guild_id TEXT,
-                user_id TEXT,
+                guild_id INTEGER,
+                user_id INTEGER,
                 xp INTEGER NOT NULL,
                 PRIMARY KEY (guild_id, user_id)
             )"""
         )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS modules (
+                guild_id INTEGER PRIMARY KEY,
+                admin BOOLEAN DEFAULT 1,
+                applications BOOLEAN DEFAULT 1,
+                codygen BOOLEAN DEFAULT 1,
+                dashboard BOOLEAN DEFAULT 1,
+                fm BOOLEAN DEFAULT 1,
+                fun BOOLEAN DEFAULT 1,
+                info BOOLEAN DEFAULT 1,
+                level BOOLEAN DEFAULT 1,
+                moderation BOOLEAN DEFAULT 1,
+                settings BOOLEAN DEFAULT 1,
+                utility BOOLEAN DEFAULT 1
+                logging BOOLEAN DEFAULT 1
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS webhooks (
+                channel_id INTEGER,
+                webhook_id INTEGER,
+                webhook_token,
+                PRIMARY KEY (channel_id, webhook_id)
+
+            )
+            """
+        )
+        print("created (missing?) tables")
         await con.commit()
+
+
+async def add_column():
+    async with aiosqlite.connect(DB_FILE) as con:
+        table = input("table (e.g 'modules') >")
+        column = input("column name (e.g 'logging') >")
+        data = input("extra data (e.g 'BOOLEAN DEFAULT 1') >")
+        await con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {data}")
 
 
 async def convert_from_json():
@@ -70,6 +116,7 @@ async def convert_from_json():
         print(
             "looks like the database already exists.\nthe program cannot proceed with an already existing database"
         )
+        print("to just create the tables, run this script with the -t argument")
         return
     await create_table()
     async with aiosqlite.connect(DB_FILE) as con:
@@ -79,7 +126,14 @@ async def convert_from_json():
                 guild_id = int(f[:-5])
                 content = await ff.read()
                 data = json.loads(content)
-
+                for level, role in data["modules"]["level"].get("rewards", {}).items():
+                    await con.execute(
+                        """INSERT INTO level_rewards (guild_id, level, reward_id) VALUES (?, ?, ?)""",
+                        (guild_id, level, role),
+                    )
+                print("inserted level rewards")
+                # await con.commit()
+                # continue
                 await con.execute(
                     """INSERT INTO guilds (guild_id, prefix, prefix_enabled, level_per_message, levelup_channel, config_ver, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
@@ -98,6 +152,7 @@ async def convert_from_json():
                         """INSERT INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)""",
                         (guild_id, user, xp_data.get("xp", 0)),
                     )
+
                 print("inserted leveling data")
                 await con.execute(
                     """INSERT INTO guild_commands (guild_id, wokemeter_min, wokemeter_max) VALUES (?, ?, ?)""",
@@ -142,6 +197,7 @@ async def convert_from_json():
                     )
                 print("inserted role boosts")
         await con.commit()
+        await con.close()
         print("all done! converted your existing json data into a database")
 
 
@@ -158,5 +214,27 @@ async def connect() -> aiosqlite.Connection:
     return await aiosqlite.connect(DB_FILE)
 
 
+async def user_tests():
+    con = await aiosqlite.connect(DB_FILE)
+    cur: aiosqlite.Cursor = await con.cursor()
+    rewards_res = await cur.execute(
+        "SELECT level, reward_id FROM level_rewards WHERE guild_id=?",
+        (1333785291584180244,),
+    )
+    print(await rewards_res.fetchall())
+    users_res = await cur.execute(
+        "SELECT user_id, xp FROM users WHERE guild_id=?", (1333785291584180244,)
+    )
+    users = await users_res.fetchall()
+    print(users)
+
+
 if __name__ == "__main__":
-    asyncio.run(convert_from_json())
+    if "-t" in sys.argv:
+        asyncio.run(create_table())
+    elif "-c" in sys.argv:
+        asyncio.run(add_column())
+    elif "-s" in sys.argv:
+        asyncio.run(user_tests())
+    else:
+        asyncio.run(convert_from_json())
