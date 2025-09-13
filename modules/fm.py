@@ -12,6 +12,8 @@ from discord.ext import commands
 from discord import app_commands
 from main import Color, logger
 import aiofiles
+<<<<<<< HEAD
+=======
 from ext.ui_base import Message
 import ext.errors
 from typing import cast
@@ -81,7 +83,11 @@ class fmActionRow(discord.ui.ActionRow):
             old_label = button.label or "0"
             button.label = str(int(old_label) + 1)
 
+<<<<<<< HEAD
+        await interaction.message.edit(view=self.view)
+=======
         await interaction.edit_original_response(view=self.view)
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
     @discord.ui.button(
         style=discord.ButtonStyle.secondary,
@@ -115,6 +121,16 @@ class fmActionRow(discord.ui.ActionRow):
             old_label = button.label or "0"
             button.label = str(int(old_label) + 1)
 
+<<<<<<< HEAD
+        await interaction.message.edit(view=self.view)
+
+
+class fmLayout(discord.ui.LayoutView):
+    def __init__(self, track_info: dict):
+        super().__init__()
+        container = discord.ui.Container()
+        container.add_item(fmSection(track_info))
+=======
         await interaction.edit_original_response(view=self.view)
 
 
@@ -126,10 +142,15 @@ class fmLayout(discord.ui.LayoutView):
         container = discord.ui.Container()
         container.add_item(fmSection(track_info))
         # if interaction.guild:
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
         container.add_item(fmActionRow(track_info))
         self.add_item(container)
 
 
+<<<<<<< HEAD
+class lastfmAuthView(discord.ui.View):
+    @discord.ui.button(label="Login", style=discord.ButtonStyle.primary)
+=======
 class lastfmMessageWithLogin(discord.ui.LayoutView):
     def __init__(self, message, **container_options):
         super().__init__()
@@ -144,6 +165,7 @@ class lastfmAuthPromptActionRow(discord.ui.ActionRow):
         super().__init__()
 
     @discord.ui.button(label="Login", style=discord.ButtonStyle.secondary)
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
     async def auth_button(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
@@ -398,6 +420,7 @@ class fm(commands.Cog):
                 return
             await ctx.reply(
                 view=fmLayout(ctx.interaction, track_info), mention_author=False
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
             )
         except FileNotFoundError:
             view = lastfmMessageWithLogin(

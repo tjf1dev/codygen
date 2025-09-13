@@ -1,9 +1,12 @@
 from discord.ext import commands
 from discord import Interaction
 from main import version
+<<<<<<< HEAD
+=======
 import random
 import aiosqlite
 from db import get_database_latency
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 # from discord import app_commands
 import discord
@@ -14,7 +17,10 @@ class tests(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = ""
+<<<<<<< HEAD
+=======
         self.db: aiosqlite.Connection = bot.db
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
     class TestButton(discord.ui.Button):
         async def callback(self, interaction: Interaction):
@@ -78,6 +84,12 @@ class tests(commands.Cog):
             container.add_item(tests.TestSelectActionRow())
             container.add_item(tests.TestActionRow())
 
+<<<<<<< HEAD
+    @commands.hybrid_command(name="v2", description="preview of components v2")
+    async def v2(self, ctx: commands.Context):
+        await ctx.reply(view=self.TestLayout())
+
+=======
     @commands.command(name="v2", description="preview of components v2")
     async def v2(self, ctx: commands.Context):
         await ctx.reply(view=self.TestLayout())
@@ -108,6 +120,7 @@ class tests(commands.Cog):
             res = await cur.execute(sql)
             await msg.edit(content=f"{content}\n```\n{await res.fetchall()}```")
 
+>>>>>>> d8144704f073cb216dcb321292009eef4b5566af
 
 async def setup(bot):
     await bot.add_cog(tests(bot))
