@@ -411,7 +411,7 @@ async def is_module_enabled(ctx: commands.Context):
 async def on_command_error(ctx: commands.Context, error):
     if not ctx.command:
         return
-    error = error.original
+    error = error.original if isinstance(error, commands.CommandInvokeError) else error
     logger.error(
         f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__} while running {ctx.command.qualified_name}: {error}"
     )
