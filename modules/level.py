@@ -235,52 +235,6 @@ async def reward_xp(
             logger.error(f"failed to remove roles from {member}: {e}")
 
 
-async def xp(user: discord.Member, guild: discord.Guild, con: aiosqlite.Connection):
-    """
-    Main handler for xp gain
-    This takes boosts to account, levelup message is sent seperately
-    """
-    cur: aiosqlite.Cursor = await con.cursor()
-
-    # fetch xp per message
-    per_message_res = await cur.execute(
-        "SELECT level_per_message FROM guilds WHERE guild_id = ?", (guild.id,)
-    )
-    per_message_row = await per_message_res.fetchone()
-
-    # fetch current xp of user
-    xp_res = await cur.execute(
-        "SELECT xp FROM users WHERE guild_id = ? AND user_id = ?", (guild.id, user.id)
-    )
-    xp_row = await xp_res.fetchone()
-
-    base = per_message_row[0] if per_message_row else 0
-    xp = xp_row[0] if xp_row else 0
-    multiplier_func = await get_boosts(cur, guild, user)
-    multiplier = multiplier_func["multiplier"]
-    add = int(base * (1 + multiplier / 100))
-    # ensure row exists
-    await cur.execute(
-        "INSERT OR IGNORE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
-        (guild.id, user.id, 0),
-    )
-
-    # then update counter
-    await cur.execute(
-        "UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
-        (add, guild.id, user.id),
-    )
-    new_xp = xp + add
-    level = xp_to_level(xp)
-    new_level = xp_to_level(new_xp)
-    if new_level > level:
-        logger.debug(f"{user.id} leveled up from {level} {xp} to {new_level} {new_xp}")
-        await reward_xp(user, guild, con, new_xp)
-        await send_levelup(user, guild, xp, new_xp, multiplier, cur, level, new_level)
-    await con.commit()
-    # logger.debug(f"added {add}xp to {user.id}. this puts them at level {xp_to_level(new_xp)}, with {new_xp}xp.")
-
-
 class level(commands.Cog):
     def __init__(self, bot):
         self.bot: Codygen = bot
@@ -290,13 +244,67 @@ class level(commands.Cog):
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
         try:
-            await xp(message.author, message.guild, self.db)
+            await self.xp(message.author, message.guild, self.db)
         except AttributeError:  # no db loaded yet
             logger.warning("tried to obtain xp before fully initialized")
             pass
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
+
+    async def xp(
+        self, user: discord.Member, guild: discord.Guild, con: aiosqlite.Connection
+    ):
+        """
+        Main handler for xp gain
+        This takes boosts to account, levelup message is sent seperately
+        """
+        cur: aiosqlite.Cursor = await con.cursor()
+
+        # fetch xp per message
+        per_message_res = await cur.execute(
+            "SELECT level_per_message FROM guilds WHERE guild_id = ?", (guild.id,)
+        )
+        per_message_row = await per_message_res.fetchone()
+
+        # fetch current xp of user
+        xp_res = await cur.execute(
+            "SELECT xp FROM users WHERE guild_id = ? AND user_id = ?",
+            (guild.id, user.id),
+        )
+        xp_row = await xp_res.fetchone()
+
+        base = per_message_row[0] if per_message_row else 0
+        xp = xp_row[0] if xp_row else 0
+        multiplier_func = await get_boosts(cur, guild, user)
+        multiplier = multiplier_func["multiplier"]
+        add = int(base * (1 + multiplier / 100))
+        # ensure row exists
+        await cur.execute(
+            "INSERT OR IGNORE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
+            (guild.id, user.id, 0),
+        )
+
+        # then update counter
+        await cur.execute(
+            "UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
+            (add, guild.id, user.id),
+        )
+        new_xp = xp + add
+        level = xp_to_level(xp)
+        new_level = xp_to_level(new_xp)
+        if new_level > level:
+            self.bot.dispatch("member_level_up", user, xp, new_xp, guild)
+            logger.debug(
+                f"{user.id} leveled up from {level} {xp} to {new_level} {new_xp}"
+            )
+            await reward_xp(user, guild, con, new_xp)
+            await send_levelup(
+                user, guild, xp, new_xp, multiplier, cur, level, new_level
+            )
+        await con.commit()
+
+        # logger.debug(f"added {add}xp to {user.id}. this puts them at level {xp_to_level(new_xp)}, with {new_xp}xp.")
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.allowed_installs(guilds=True, users=False)

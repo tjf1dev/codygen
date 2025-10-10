@@ -88,7 +88,7 @@ def parse_commands(commands, bot=None) -> list[dict]:
                     valid_cmds.append(subcommand_data)
 
                 if option["type"] == 2:  # group with a parent
-                    for sub_option in option["options"]:  # looking for type 2's
+                    for sub_option in option.get("options", {}):  # looking for type 2's
                         if sub_option["type"] == 1:  # sub-subcommand
                             sub_option_parent = option["name"]
                             option_parent = cmd["name"]
@@ -417,3 +417,8 @@ def ensure_env():
             + "https://github.com/tjf1dev/codygen#self-hosting."
         )
         sys.exit(1)
+
+
+def permissions_to_list(perms: discord.Permissions) -> list:
+    enabled = [name.replace("_", " ").title() for name, value in perms if value]
+    return enabled if enabled else ["[none]"]
