@@ -343,8 +343,8 @@ async def root():
 
 
 async def main():
+    logger.ok("starting webserver")
     await serve(app, config)
 
 
-logger.ok("starting webserver")
-asyncio.run(main())
+

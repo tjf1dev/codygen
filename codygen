@@ -2,11 +2,13 @@
 import json
 import typer
 import pathlib
+import asyncio
 from rich.console import Console
 from rich.panel import Panel
 from ext.config import DEFAULT_CONFIG
 from typing import Annotated
 from main import main as start_codygen
+from extensions.api import main as start_api
 # original cli tool from https://github.com/tjf1dev/protochat
 
 
@@ -57,6 +59,11 @@ def setup(force: Annotated[bool, typer.Option("--force", "-f")] = False):
 @app.command()
 def run():
     start_codygen()
+
+
+@app.command()
+def api():
+    asyncio.run(start_api())
 
 
 if __name__ == "__main__":

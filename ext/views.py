@@ -25,10 +25,10 @@ class ChangelogLayout(LayoutView):
         commit_text = ""
         for commit in commits[1:6]:  # all 5 latest ones except for the first latest
             commit_text += (
-                f"-# [`{commit["sha"][:7]}`](<{commit["html_url"]}>)"
+                f"-# [`{commit['sha'][:7]}`](<{commit['html_url']}>)"
                 " • "
-                f"[`{commit["author"]["login"]}`](<{commit["author"]["html_url"]}>) "
-                f"`{commit["commit"]["message"].split('\n')[0]}`\n"
+                f"[`{commit['author']['login']}`](<{commit['author']['html_url']}>) "
+                f"`{commit['commit']['message'].split('\n')[0]}`\n"
             )
         container.add_item(TextDisplay(commit_text))
         self.add_item(container)
@@ -51,17 +51,13 @@ class AboutLayout(LayoutView):
                 "## contributors\n"
                 f"[`contribute to codygen`](<https://github.com/tjf1dev/codygen>)\n{contributors}"
             )
-        ).add_item(
-            Separator()
-        ).add_item(
+        ).add_item(Separator()).add_item(
             TextDisplay(
                 "## support\n"
                 "[`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n"
                 "it takes a long time making a bot, any support would be appreciated! :3"
             )
-        ).add_item(
-            Separator()
-        ).add_item(
+        ).add_item(Separator()).add_item(
             TextDisplay(
                 "thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3"
             )
@@ -98,7 +94,6 @@ class LevelupLayout(LayoutView):
         place_in_leaderboard: int,
         highest_boost: int,
     ):
-
         super().__init__()
         container = Container()
         self.add_item(container)
