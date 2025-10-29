@@ -23,4 +23,7 @@ class testing(commands.Cog):
 
 
 async def setup(bot):
+    if bot.release:
+        logger.debug("skipping testing cog - running on release target")
+        return
     await bot.add_cog(testing(bot))

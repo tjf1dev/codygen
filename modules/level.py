@@ -240,6 +240,9 @@ class level(commands.Cog):
         self.bot: Codygen = bot
         self.description = "track and reward users for activity"
         self.db: aiosqlite.Connection = bot.db
+        self.allowed_contexts = discord.app_commands.allowed_contexts(
+            guilds=True, dms=False, private_channels=False
+        )
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
@@ -836,10 +839,11 @@ class level(commands.Cog):
     async def rewards(self, ctx: commands.Context):
         pass
 
+    # todo interactive guide
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_guild_permissions(administrator=True)
-    @level.command(name="setup", description="tweak leveling settings")
+    @level.command(name="setup", description="setup leveling settings")
     async def setup(
         self,
         ctx: commands.Context,

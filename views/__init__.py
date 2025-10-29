@@ -11,8 +11,11 @@ from .about import AboutLayout
 from .changelog import ChangelogLayout
 from .help import HelpLayout
 from .ping import PingLayout
+from .add import AddLayout
 
 from .settings_init import InitStartLayout
+
+from .fun.guess import GuessLayout
 
 # TODO bring fm module layouts here
 __all__ = [
@@ -26,5 +29,7 @@ __all__ = [
     "ChangelogLayout",
     "HelpLayout",
     "PingLayout",
+    "AddLayout",
     "InitStartLayout",
+    "GuessLayout",
 ]

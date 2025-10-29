@@ -3,6 +3,8 @@ import time
 import os
 import aiohttp
 import discord
+import aiosqlite
+from models import Codygen
 from discord.ext import commands
 from discord import app_commands
 from main import logger, Color
@@ -112,46 +114,18 @@ class utility(commands.Cog):
     # hey, for self-hosted users: #! please don’t remove this command
     # i get it, you want your own bot, but at least give me some credit for this
     # if you really want your own bot, make one yourself
-    # tip: codygen works under the MIT license. #* REMOVING CREDIT IS ILLEGAL.
-    # you can do whatever you want with it, but #* if you redistribute this code without credit, you’re BREAKING THE LAW.
+    # tip: codygen works under the MIT license.
+    # you can do whatever you want with it, but if redestributing without credit is somewhat illegal
     # enjoy using codygen!
     @commands.command()
     async def whoami(self, ctx: commands.Context):
         await ctx.reply(
             embed=discord.Embed(
                 title="",
-                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal ;3\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py>))",
+                description="# codygen\n### made by [tjf1](https://tjf1dev/codygen)\nMIT licensed. you can do whatever, but don't remove credit if you're redistributing - it's required by the license, and somewhat illegal\n-# for more information, read LICENSE, or the comment above this command ([cog utility.py](<https://github.com/tjf1dev/codygen/blob/main/cogs/utility.py>))",
                 color=Color.negative,
             )
         )
-
-    # deltarune,, nevr heard of this game smh
-    # @tasks.loop(hours=24)
-    # async def countdown_loop(self):
-    #     target_date = datetime(datetime.now().year, 6, 4)
-    #     channel = self.bot.get_channel(1374402713118572635)
-    #     now = datetime.now()
-    #     if now > target_date:
-    #         await channel.send("deltarune tomorrow :3 (it's out)")
-    #         self.countdown_loop.stop()
-    #     else:
-    #         days_left = (target_date - now).days
-    #         if days_left == 1:
-    #             await channel.send("deltarune tomorrow")
-    #         else:
-    #             await channel.send(f"{days_left} days until deltarune")
-
-    # @countdown_loop.before_loop
-    # async def before_countdown(self):
-    #     await self.bot.wait_until_ready()
-    #     now = datetime.now()
-    #     next_midnight = datetime.combine(
-    #         now.date() + timedelta(days=1), datetime.min.time()
-    #     )
-    #     seconds_until_midnight = (next_midnight - now).total_seconds()
-    #     await asyncio.sleep(seconds_until_midnight)
-
-    # @commands.Cog.listener()
 
     async def cog_load(self):
         self.bot.tree.add_command(convert_to_gif)
@@ -164,6 +138,7 @@ class utility(commands.Cog):
     async def utility(self, ctx: commands.Context):
         await ctx.reply("utility")
 
+    # TODO components v2-ify this
     @utility.command(name="pfp", description="get someone's pfp")
     async def pfp(
         self, ctx: commands.Context, user: discord.Member | discord.User | None = None
@@ -358,40 +333,104 @@ class utility(commands.Cog):
             )
             await message.reply(view=e)
 
-    # # now some exclusives i need for my server
-    # # guild id will be hardcoded
-    # import re
+    # * maybe move this to a different cog?
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @utility.group(
+        name="tag", description="commands related to server tags (primary guilds)"
+    )
+    async def tag_group(self, ctx: commands.Context): ...
 
-    # @commands.Cog.listener("on_message")
-    # async def on_message(self, message: discord.Message):
-    #     if message.guild is None:
-    #         return
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @tag_group.command(
+        name="claim",
+        description="grants the role for having the current server's tag",
+    )
+    async def claim_tag(self, ctx: commands.Context):
+        db: aiosqlite.Connection = cast(Codygen, self.bot).db
+        if not ctx.guild or not isinstance(ctx.author, discord.Member):
+            return
+        role = await (
+            await db.execute(
+                "SELECT role_id FROM primary_guild_roles WHERE guild_id=?",
+                (ctx.guild.id,),
+            )
+        ).fetchone()
+        if ctx.author.primary_guild.id != ctx.guild.id:
+            if role:
+                await ctx.author.remove_roles(
+                    discord.Object(role[0]), reason="primary guild change"
+                )
+            await ctx.reply(
+                view=Message(
+                    "your server tag isn't from this server!",
+                    accent_color=Color.negative,
+                ),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
 
-    #     if message.guild.id != 1333785291584180244:
-    #         return
+        if ctx.author.primary_guild.id == ctx.guild.id and ctx.author.primary_guild.tag:
+            if role:
+                if any(r.id == role for r in ctx.author.roles):
+                    await ctx.reply(
+                        view=Message("you already have this server's tag role!"),
+                        allowed_mentions=discord.AllowedMentions.none(),
+                    )
+                await ctx.author.add_roles(
+                    discord.Object(role[0]), reason="primary guild claim"
+                )
+                await ctx.reply(
+                    view=Message(
+                        f"your server tag (`{ctx.author.primary_guild.tag}`) is from this server!\nthe <@&{role[0]}> role has been granted."
+                    ),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
+                logger.debug(
+                    f"adding role {role[0]} to {ctx.author.id} for primary guild {ctx.author.primary_guild.id}"
+                )
+            else:
+                await ctx.reply(
+                    view=Message(
+                        f"your server tag (`{ctx.author.primary_guild.tag}`) is from this server, but there is no tag role. try contacting server administrators!",
+                        accent_color=Color.negative,
+                    ),
+                    allowed_mentions=discord.AllowedMentions.none(),
+                )
 
-    #     if message.author.bot:
-    #         return
-
-    #     url_pattern = re.compile(
-    #         r"https?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+\.(?:png|jpg|jpeg|gif|webp|bmp)"
-    #     )
-    #     urls = url_pattern.findall(message.content)
-
-    #     if urls:
-    #         perms = message.channel.permissions_for(message.author)
-    #         return
-    #         if not perms.embed_links:
-    #             sticker = await message.guild.fetch_sticker(1370752176787558451)
-    #             if sticker:
-    #                 await message.reply(stickers=[sticker])
-    #                 return
-    #             else:
-    #                 return
-    #         else:
-    #             return
-    #     else:
-    #         return
+    # detect primary guild changes
+    @commands.Cog.listener()
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
+        if before.bot:
+            return
+        if before.primary_guild.id != after.primary_guild.id:
+            db: aiosqlite.Connection = cast(Codygen, self.bot).db
+            # change previous guild
+            oldrole = await (
+                await db.execute(
+                    "SELECT role_id FROM primary_guild_roles WHERE guild_id=?",
+                    (before.guild.id,),
+                )
+            ).fetchone()
+            if oldrole:
+                await before.remove_roles(
+                    discord.Object(oldrole[0]), reason="primary guild change"
+                )
+                logger.debug(
+                    f"removing role {oldrole[0]} from {before.id} for primary guild change from {before.primary_guild.id}"
+                )
+            # change new guild
+            role = await (
+                await db.execute(
+                    "SELECT role_id FROM primary_guild_roles WHERE guild_id=?",
+                    (after.guild.id,),
+                )
+            ).fetchone()
+            if role:
+                await after.add_roles(
+                    discord.Object(role[0]), reason="primary guild change"
+                )
+                logger.debug(
+                    f"adding role {role[0]} to {after.id} for primary guild {after.primary_guild.id}"
+                )
 
 
 async def setup(bot):

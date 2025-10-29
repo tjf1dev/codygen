@@ -14,6 +14,7 @@ class Codygen(commands.AutoShardedBot):
     refresh_commands: Any
     ipc: ipcx.Server
     log: logging.Logger
+    release: bool
     already_ready: bool
     db: aiosqlite.Connection
     start_time: float

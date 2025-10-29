@@ -227,6 +227,9 @@ except Exception:
 # command configs
 data = get_global_config()
 version = open("VERSION").read()
+
+# used to determine testing modules etc.
+release = not version.endswith("alpha")
 if not version:
     logger.error("something went wrong cant load version")
 # bot definitions
@@ -277,6 +280,7 @@ async def on_ipc_error(self, endpoint, error):
 # these get passed to cogs
 flor = Color
 client.version = version
+client.release = release
 client.refresh_commands = refresh_commands
 # load env
 dotenv.load_dotenv()
@@ -411,12 +415,15 @@ async def is_module_enabled(ctx: commands.Context):
 async def on_command_error(ctx: commands.Context, error):
     if not ctx.command:
         return
+    if isinstance(error, commands.HybridCommandError):
+        if isinstance(error.original, commands.CommandInvokeError):
+            error = error.original.original
     error = error.original if isinstance(error, commands.CommandInvokeError) else error
     logger.error(
-        f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__name__} while running {ctx.command.qualified_name}: {error}"
+        f"{ctx.author.name} ({ctx.author.id}) has encountered a {type(error).__qualname__} while running {ctx.command.qualified_name}: {error}"
     )
-    tb = "".join(format_exception(type(error), error, error.__traceback__))
-    logger.error(tb)
+    # tb = "".join(format_exception(type(error), error, error.__traceback__))
+    # logger.error(tb)
     if isinstance(
         error,
         commands.MissingPermissions
@@ -427,7 +434,9 @@ async def on_command_error(ctx: commands.Context, error):
             message="### you don't have permissions to run this command.",
             accent_color=Color.negative,
         )
-        await ctx.reply(view=e, ephemeral=True)
+        await ctx.reply(
+            view=e, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
     if isinstance(error, commands.CheckFailure | commands.errors.CheckFailure):
         return
     elif isinstance(error, commands.CommandNotFound):
@@ -437,7 +446,9 @@ async def on_command_error(ctx: commands.Context, error):
             message=f"### error\n{error}\n",
             accent_color=Color.negative,
         )
-        await ctx.send(view=e, ephemeral=True)
+        await ctx.reply(
+            view=e, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
     else:
         header = "an unexpected error occured."
         if isinstance(
@@ -454,7 +465,9 @@ async def on_command_error(ctx: commands.Context, error):
             f"### version\n```\n{version}```",
             accent_color=Color.negative,
         )
-        await ctx.send(view=e, ephemeral=True)
+        await ctx.reply(
+            view=e, ephemeral=True, allowed_mentions=discord.AllowedMentions.none()
+        )
 
         # optional: raise error (doesn't really fit here since this is the handler)
         # raise commands.errors.CommandError(str(error))

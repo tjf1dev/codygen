@@ -118,6 +118,14 @@ class settings(commands.Cog):
             read_messages=True,
             send_messages=True,
             manage_messages=True,
+            kick_members=True,
+            ban_members=True,
+            create_instant_invite=True,
+            change_nickname=True,
+            manage_nicknames=True,
+            send_messages_in_threads=True,
+            create_public_threads=True,
+            create_private_threads=True,
             embed_links=True,
             attach_files=True,
             read_message_history=True,
@@ -177,9 +185,10 @@ class settings(commands.Cog):
         )
 
     @commands.has_guild_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(prefix="The new prefix to set")
     @settings.command(
-        name="prefix", description="View the current prefix and change it."
+        name="prefix", description="view the current prefix and change it."
     )
     async def prefix(self, ctx: commands.Context, prefix: str | None = None):
         if not ctx.guild:
