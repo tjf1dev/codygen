@@ -16,8 +16,7 @@ class moderation(commands.Cog):
     @commands.hybrid_group(
         name="moderation", description="commands to help you manage your community."
     )
-    async def moderation(self, ctx: commands.Context):
-        pass
+    async def moderation(self, ctx: commands.Context): ...
 
     @commands.Cog.listener()
     async def on_ready(self):

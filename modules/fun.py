@@ -5,6 +5,7 @@ import aiosqlite
 import hashlib
 import random
 from typing import cast
+from views import GuessLayout
 from discord.ext import commands
 from ext.colors import Color
 from ext.logger import logger
@@ -15,6 +16,7 @@ class fun(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "fun commands!"
+        self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -239,20 +241,7 @@ class fun(commands.Cog):
                 break
         guessUser = user.name
         guessUserDisplay = user.display_name
-        pfp = user.avatar.url
-        embed = discord.Embed(
-            title=" ", description="Who is that?", color=Color.positive
-        )
-        embed.set_author(name="Which user is that??")
-        embed.set_thumbnail(url=pfp)
-        await ctx.send(
-            embed=embed,
-            view=guessButtons(
-                guess_user=guessUser,
-                guess_user_display=guessUserDisplay,
-                interaction=ctx,
-            ),
-        )
+        await ctx.reply(view=GuessLayout(user=user))
 
     # @verify()
     # @fun_group.command(name="guessrank", description="Check how many times have you guessed!")
@@ -304,115 +293,6 @@ class fun(commands.Cog):
         e = discord.Embed(title=":3", color=Color.white)
         e.set_image(url=req.json()[0]["url"])
         await ctx.reply(embed=e)
-
-
-class guessNewGame(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="new game", style=discord.ButtonStyle.green, custom_id="new_game"
-    )
-    async def new_game(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        global guessUser
-        global guessUserDisplay
-        if not interaction.guild:
-            return
-        users = interaction.guild.members
-        while True:
-            user = random.choice(users)
-            if not user.bot and user.avatar:
-                break
-        guessUser = user.name
-        guessUserDisplay = user.display_name
-        pfp = user.avatar.url
-        embed = discord.Embed(
-            title=" ", description="Who is that?", color=Color.positive
-        )
-        embed.set_author(name="Which user is that??")
-        embed.set_thumbnail(url=pfp)
-        await interaction.response.send_message(
-            embed=embed,
-            view=guessButtons(
-                guess_user=guessUser,
-                guess_user_display=guessUserDisplay,
-                interaction=interaction,
-            ),
-        )
-
-
-class Questionnaire(discord.ui.Modal, title="Guess the user!"):
-    name = discord.ui.TextInput(label="Which user is that??")
-
-    def __init__(self, guess_user, guess_user_display, view, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.guess_user = guess_user
-        self.guess_user_display = guess_user_display
-        self.view = view  # store the guessButtons view instance
-
-    async def on_submit(self, interaction: discord.Interaction):
-        # Get the user's guess from the text input's value
-        guessOG = self.name.value
-        guessLowercase = guessOG.lower()
-        guessUserDisplayLowercase = str(self.guess_user_display).lower()
-        if (
-            guessLowercase == self.guess_user.lower()
-            or guessLowercase == guessUserDisplayLowercase
-        ):
-            embed = discord.Embed(color=Color.positive)
-            embed.add_field(name="Correct!", value=" ", inline=True)
-            embed.set_author(
-                name=f"{interaction.user.name} tried: {guessOG}",
-                icon_url=(
-                    interaction.user.avatar.url if interaction.user.avatar else None
-                ),
-            )
-
-            # Stop the guessButtons view (cancelling its timeout)
-            self.view.stop()
-            # Send a new game message
-            await interaction.response.send_message(embed=embed, view=guessNewGame())
-        else:
-            embed = discord.Embed(color=Color.negative)
-            embed.add_field(name="wrong!", value=" ", inline=True)
-            embed.set_author(
-                name=interaction.user.name + f" tried: {guessOG}",
-                icon_url=(
-                    interaction.user.avatar.url if interaction.user.avatar else None
-                ),
-            )
-            await interaction.response.send_message(embed=embed)
-
-
-class guessButtons(discord.ui.View):
-    def __init__(self, guess_user, guess_user_display, interaction, *, timeout=15):
-        super().__init__(timeout=timeout)
-        self.guess_user = guess_user
-        self.guess_user_display = guess_user_display
-        self.interaction = interaction  # Store the interaction for later use
-
-    async def on_timeout(self):
-        for child in self.children:
-            button = cast(discord.ui.Button, child)
-            button.disabled = True
-        e = discord.Embed(
-            title="time's up!",
-            description=f"the user was... {self.guess_user}",
-            color=Color.negative,
-        )
-        await self.interaction.message.edit(view=self)
-        await self.interaction.followup.send(embed=e)
-
-    @discord.ui.button(label="guess", style=discord.ButtonStyle.red)
-    async def confirm(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        # Pass the current view (self) to the modal
-        await interaction.response.send_modal(
-            Questionnaire(self.guess_user, self.guess_user_display, view=self)
-        )
 
 
 async def setup(bot):

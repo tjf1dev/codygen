@@ -3,7 +3,7 @@ from discord import app_commands
 import discord
 import os
 import aiohttp
-from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout
+from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout, AddLayout
 from main import logger, Color, get_global_config
 from ext import errors
 
@@ -12,6 +12,7 @@ class codygen(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "core codygen features"
+        self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -35,23 +36,7 @@ class codygen(commands.Cog):
         name="add", description="lets you add codygen to your server or profile"
     )
     async def add(self, ctx: commands.Context):
-        bid = os.getenv("CLIENT_ID")
-        guild = (
-            f"https://discord.com/oauth2/authorize?client_id={bid}&integration_type=0"
-        )
-        user = (
-            f"https://discord.com/oauth2/authorize?client_id={bid}&integration_type=1"
-        )
-        e = discord.Embed(
-            description="# add codygen\n"
-            f"## [server]({guild})\n"
-            "use the link above to invite codygen to your server.\n"
-            f"## [user install]({user})\n"
-            "use this link to install codygen to your profile. you will be able to use it's commands anywhere\n\n"
-            f"-# [about codygen](https://github.com/tjf1dev/codygen)",
-            color=Color.accent,
-        )
-        await ctx.reply(embed=e, ephemeral=False)
+        await ctx.reply(view=AddLayout(self.bot), ephemeral=False)
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)

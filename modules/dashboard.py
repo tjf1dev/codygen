@@ -216,6 +216,9 @@ class dashboard(commands.Cog):
     def __init__(self, bot: Codygen):
         self.bot = bot
         self.db: aiosqlite.Connection = bot.db
+        self.allowed_contexts = discord.app_commands.allowed_contexts(
+            True, False, False
+        )
 
     @ipcx.route()
     async def add_bot(self, data):

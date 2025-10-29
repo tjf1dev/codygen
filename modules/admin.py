@@ -15,6 +15,7 @@ class admin(commands.Cog):
     def __init__(self, bot):
         self.bot = cast(Codygen, bot)  # pyright: ignore[reportAttributeAccessIssue]
         self.description = "commands for bot administrators. for development purposes"
+        self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
     # * THE FOLLOWING GROUP DOESNT HAVE A SLASH COMMAND AND ITS ON PURPOSE!!
     @commands.is_owner()

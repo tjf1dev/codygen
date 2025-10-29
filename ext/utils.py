@@ -42,10 +42,7 @@ def parse_commands(commands, bot=None) -> list[dict]:
                 dpy_command_lookup[full_name] = {
                     "cog_name": cog_name,
                     "cog_description": getattr(cog, "description", "") or "",
-                    "dpy_description": cmd.description or "",
-                    "dpy_help": cmd.help or "",
-                    "dpy_usage": str(cmd.usage) if cmd.usage else "",
-                    "dpy_brief": cmd.brief or "",
+                    "description": cmd.description or "",
                 }
 
     # command_type = my custom type for commands

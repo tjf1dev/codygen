@@ -85,7 +85,7 @@ async def create_table():
                 level BOOLEAN DEFAULT 1,
                 moderation BOOLEAN DEFAULT 1,
                 settings BOOLEAN DEFAULT 1,
-                utility BOOLEAN DEFAULT 1
+                utility BOOLEAN DEFAULT 1,
                 logging BOOLEAN DEFAULT 1
             )"""
         )
@@ -98,6 +98,60 @@ async def create_table():
 
             )
             """
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS xp_wheel_event (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                author_id INTEGER NOT NULL,
+                timestamp INTEGER NOT NULL,
+                min_range INTEGER DEFAULT 0,
+                max_range INTEGER DEFAULT 10
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS xp_wheel_bets (
+                event_id INTEGER,
+                user_id INTEGER,
+                number INTEGER,
+                timestamp INTEGER NOT NULL,
+                FOREIGN KEY (event_id) REFERENCES xp_wheel_event(event_id),
+                PRIMARY KEY (event_id, user_id)
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS primary_guild_roles (
+                guild_id INTEGER PRIMARY KEY,
+                role_id INTEGER
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS uotm_events (
+                event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id INTEGER NOT NULL,
+                active INTEGER,
+                name TEXT NOT NULL,
+                timestamp DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS uotm_candidates (
+                event_id INTEGER,
+                user_id TEXT NOT NULL,
+                timestamp DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (event_id, user_id),
+                FOREIGN KEY (event_id) REFERENCES uotm_events(event_id)
+            )"""
+        )
+        await con.execute(
+            """CREATE TABLE IF NOT EXISTS uotm_votes (
+                event_id INTEGER,
+                user_id INTEGER,
+                vote_id INTEGER,
+                timestamp DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (event_id, user_id),
+                FOREIGN KEY (event_id) REFERENCES uotm_events(event_id)
+            )"""
         )
         print("created (missing?) tables")
         await con.commit()

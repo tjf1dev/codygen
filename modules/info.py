@@ -25,6 +25,7 @@ class info(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "pretty self explanatory"
+        self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

@@ -281,6 +281,7 @@ class logging(commands.Cog):
                 avatar_url=user.display_avatar.url,
             )
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
@@ -288,6 +289,7 @@ class logging(commands.Cog):
     async def logging(self, ctx: commands.Context):
         return
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
@@ -302,12 +304,11 @@ class logging(commands.Cog):
             return
         await ctx.reply(view=LoggingSetupLayout(self.bot))
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
-    @logging.command(
-        name="disable_logs", description="disabled logging in this server."
-    )
+    @logging.command(name="disable", description="disables logging in this server.")
     async def logging_disable(self, ctx: commands.Context):
         # TODO maybe a confirmation button?
         if not ctx.guild:
@@ -349,6 +350,7 @@ class logging(commands.Cog):
 
         return choices[:25]
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
@@ -356,6 +358,7 @@ class logging(commands.Cog):
     async def events(self, ctx: commands.Context):
         pass
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
@@ -416,6 +419,7 @@ class logging(commands.Cog):
             ephemeral=True,
         )
 
+    @app_commands.allowed_contexts(True, False, False)
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
@@ -480,9 +484,10 @@ class logging(commands.Cog):
             ephemeral=True,
         )
 
-    @app_commands.default_permissions(administrator=True)
-    @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_permissions(administrator=True)
+    @app_commands.allowed_contexts(True, False, False)
+    @app_commands.default_permissions(view_audit_log=True)
+    @app_commands.checks.has_permissions(view_audit_log=True)
+    @commands.has_permissions(view_audit_log=True)
     @logging.command(name="check", description="checks if logging set up correctly")
     async def logging_check(self, ctx: commands.Context):
         db = self.bot.db

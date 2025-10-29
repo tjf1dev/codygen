@@ -10,6 +10,9 @@ class applications(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "manage server applications, if you have them enabled."
+        self.allowed_contexts = discord.app_commands.allowed_contexts(
+            True, False, False
+        )
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
@@ -22,6 +25,7 @@ class applications(commands.Cog):
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
 
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.checks.has_permissions(manage_guild=True)
     @commands.has_guild_permissions(manage_guild=True)
     @app_commands.checks.has_permissions(manage_guild=True)

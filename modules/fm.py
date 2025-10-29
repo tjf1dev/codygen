@@ -213,6 +213,7 @@ class fm(commands.Cog):
         self.description = (
             "use your Last.fm integration to check what you're listening to."
         )
+        self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -298,34 +299,6 @@ class fm(commands.Cog):
     )
     async def lastfm(self, ctx: commands.Context):
         pass
-
-    @commands.is_owner()
-    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
-    @app_commands.allowed_installs(guilds=True, users=True)
-    @lastfm.command(
-        name="raw", description="view the raw data for your currently playing track"
-    )
-    async def fm_raw(self, ctx: commands.Context):
-        with open("data/last.fm/users.json", "r") as f:
-            data = json.load(f)
-            username = (
-                data.get(str(ctx.author.id), {}).get("session", {}).get("name", {})
-            )
-
-        track_info_raw = await self.fetch_now_playing(username, raw=True)
-        track_info_raw = json.dumps(track_info_raw, indent=2)
-        fields = [
-            track_info_raw[i : i + 1000] for i in range(0, len(track_info_raw), 1000)
-        ]
-
-        e = discord.Embed(title="raw data", color=Color.accent_og)
-        for i, field in enumerate(fields):
-            e.add_field(
-                name=f"part {i + 1}", value=f"```json\n{field}```", inline=False
-            )
-
-        e.set_footer(text=f"{len(track_info_raw)} characters")
-        await ctx.reply(embed=e)
 
     @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.allowed_installs(guilds=True, users=True)
