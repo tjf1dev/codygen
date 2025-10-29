@@ -13,3 +13,5 @@ aiosqlite
 discord-ext-ipcx
 quartcord
 quart_cors
+typer
+rich
