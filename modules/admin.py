@@ -125,6 +125,13 @@ class admin(commands.Cog):
         await ctx.reply(view=Message(out))
 
     @commands.is_owner()
+    @admin.command(name="checkpoint", description="makes a WAL checkpoint")
+    async def checkpoint(self, ctx: commands.Context):
+        db = self.bot.db
+        await db.execute("PRAGMA wal_checkpoint(FULL);")
+        await ctx.message.add_reaction("✅")
+
+    @commands.is_owner()
     @status.command(
         name="reset", description="set the status to default (version display)"
     )
