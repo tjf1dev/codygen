@@ -2,6 +2,7 @@ from typing import Any
 from discord.ext import commands
 from ext.logger import logger
 from ext.ui_base import Message
+from ext.utils import get_xp, xp_to_level
 from discord import app_commands
 from ext import errors
 from ext.colors import Color
@@ -240,6 +241,161 @@ class events(commands.Cog):
         await ctx.reply(
             view=view,
             allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @app_commands.allowed_contexts(True, False, False)
+    @uotm.command(name="apply", description="applies for the current uotm event")
+    async def uotm_apply(self, ctx: commands.Context):
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
+        db: aiosqlite.Connection = self.bot.db
+        xp = await get_xp(ctx.author, self.bot)
+        if not xp:
+            level = 0
+        else:
+            level = xp_to_level(xp)
+        if level < 10:
+            await ctx.reply(
+                view=Message(
+                    f"to apply for UOTM, you must have at least level 10! you are level {level}",
+                    accent_color=Color.negative,
+                )
+            )
+            return
+        current_event = await (
+            await db.execute(
+                "SELECT (guild_id, event_id, name, timestamp) FROM uotm_events WHERE guild_id=? AND active=1",
+                (ctx.guild.id,),
+            )
+        ).fetchone()
+        if not current_event:
+            await ctx.reply(
+                view=Message(
+                    "no UOTM event running right now!", accent_color=Color.negative
+                )
+            )
+            return
+        await db.execute(
+            "INSERT INTO uotm_canidates (event_id, user_id) VALUES (?,?)",
+            (current_event[1], ctx.author.id),
+        )
+        await db.commit()
+        await ctx.reply(
+            view=Message(
+                f"## applied successfully!\nyou are now a candidate for the **{current_event[2]}** user of the month event."
+            )
+        )
+
+    @app_commands.allowed_contexts(True, False, False)
+    @uotm.command(name="vote", description="vote for a uotm candidate")
+    async def uotm_vote(self, ctx: commands.Context, target: discord.Member):
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
+        db: aiosqlite.Connection = self.bot.db
+        xp = await get_xp(ctx.author, self.bot)
+        if not xp:
+            level = 0
+        else:
+            level = xp_to_level(xp)
+        if level < 5:
+            await ctx.reply(
+                view=Message(
+                    f"to vote in UOTM, you must have at least level 5! you are level {level}",
+                    accent_color=Color.negative,
+                )
+            )
+            return
+        current_event = await (
+            await db.execute(
+                "SELECT (guild_id, event_id, name, timestamp) FROM uotm_events WHERE guild_id=? AND active=1",
+                (ctx.guild.id,),
+            )
+        ).fetchone()
+        if not current_event:
+            await ctx.reply(
+                view=Message(
+                    "no UOTM event running right now!", accent_color=Color.negative
+                )
+            )
+            return
+        candidates = await (
+            await db.execute(
+                "SELECT (user_id) FROM uotm_candidates WHERE event_id=?",
+                (current_event[1],),
+            )
+        ).fetchall()
+        if not candidates:
+            await ctx.reply(
+                view=Message(
+                    "there are no candidates yet!", accent_color=Color.negative
+                )
+            )
+            return
+        is_valid = False
+        for c in candidates:
+            if c[1] == target.id:
+                is_valid = True
+
+        if not is_valid:
+            await ctx.reply(
+                view=Message(
+                    "that isnt a valid candidate!", accent_color=Color.negative
+                )
+            )
+            return
+        await db.execute(
+            "INSERT INTO uotm_votes (event_id, user_id, vote_id) VALUES (?,?)",
+            (current_event[1], ctx.author.id, target.id),
+        )
+        await db.commit()
+        await ctx.reply(
+            view=Message(f"## voted successfully!\nvote placed for {target.mention}")
+        )
+
+    @app_commands.allowed_contexts(True, False, False)
+    @uotm.command(name="summary", description="check state of the current uotm")
+    async def uotm_summary(self, ctx: commands.Context):
+        if not isinstance(ctx.author, discord.Member) or not ctx.guild:
+            return
+        db: aiosqlite.Connection = self.bot.db
+        current_event = await (
+            await db.execute(
+                "SELECT (guild_id, event_id, name, timestamp) FROM uotm_events WHERE guild_id=? AND active=1",
+                (ctx.guild.id,),
+            )
+        ).fetchone()
+        if not current_event:
+            await ctx.reply(
+                view=Message(
+                    "no UOTM event running right now!", accent_color=Color.negative
+                )
+            )
+            return
+        votes = await (
+            await db.execute(
+                "SELECT vote_id FROM uotm_votes WHERE event_id=?", (current_event[1],)
+            )
+        ).fetchall()
+        if not votes:
+            await ctx.reply(
+                view=Message("no votes placed yet!", accent_color=Color.negative)
+            )
+            return
+        total = len(list(votes))
+        counts = {}
+
+        for (vote_id,) in votes:
+            counts[vote_id] = counts.get(vote_id, 0) + 1
+
+        sorted_counts = sorted(counts.items(), key=lambda x: x[1], reverse=True)
+
+        vote_str = ""
+        for idx, (cid, num) in enumerate(sorted_counts, start=1):
+            pct = (num / total) * 100 if total else 0
+            vote_str += f"{idx}. <@{cid}>\n-# `{num}` votes, `{pct:.1f}%`\n"
+
+        await ctx.reply(
+            view=Message(f"## user of the month {current_event[1]}\n{vote_str}")
         )
 
 

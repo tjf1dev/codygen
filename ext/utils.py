@@ -6,6 +6,7 @@ import os
 import sys
 import discord
 from typing import Tuple, Optional, Any, List
+from models import Codygen
 
 
 def state_to_id(state: str) -> str:
@@ -118,6 +119,17 @@ def parse_commands(commands, bot=None) -> list[dict]:
                 valid_cmds.append(cmd)
 
     return valid_cmds
+
+
+async def get_xp(user: discord.Member, bot: Codygen):
+    query = await (
+        await bot.db.execute(
+            "SELECT xp FROM users WHERE guild_id=? AND user_id=?",
+            (user.id, user.guild.id),
+        )
+    ).fetchone()
+    if query:
+        return query[0]
 
 
 async def get_command(
