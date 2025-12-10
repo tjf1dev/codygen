@@ -8,16 +8,18 @@ from ext import errors
 from ext.colors import Color
 import aiosqlite
 import discord
+from models import Cog
 # this cog is focused on my server rather than the public
 
 
-class events(commands.Cog):
+class events(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = ""
+        self.description = "premade events for engagement!!"
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             True, False, False
         )
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

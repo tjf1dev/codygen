@@ -6,13 +6,15 @@ import aiohttp
 from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout, AddLayout
 from main import logger, get_global_config
 from ext import errors
+from models import Cog
 
 
-class codygen(commands.Cog):
+class codygen(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "core codygen features"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

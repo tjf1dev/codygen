@@ -15,6 +15,7 @@ from views.logging_setup import LoggingSetupStart
 from models import Event
 import json
 from collections import defaultdict
+from models import Cog
 
 _event_registry: Dict[str, Event] = {}
 _event_category_map = {
@@ -52,11 +53,12 @@ def group_events_by_category(events: dict[str, Event]) -> dict[str, list[dict]]:
 
 
 # TODO add codygen's custom logs (levelup, ticket create, command triggered, prefix change, etc)
-class logging(commands.Cog):
+class logging(Cog):
     def __init__(self, bot):
         self.bot = cast(Codygen, bot)
         self.session = aiohttp.ClientSession()
-        self.cid = 1416136572977549502
+        self.hidden = False
+        self.description = "log various important actions in your server"
 
     def list_events(self) -> Dict[str, Event]:
         """

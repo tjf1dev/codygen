@@ -29,7 +29,7 @@ from db import connect, create_table
 from ext.utils import get_command, parse_flags, get_required_env, ensure_env
 from discord.ext import ipcx
 from ext.ui_base import Message
-from ext.config import DEFAULT_CONFIG
+from ext.config import DEFAULT_CONFIG, DEFAULT_MODULE_STATE
 from models import Codygen
 from typing import cast
 from ext.errors import CodygenError
@@ -40,9 +40,9 @@ from ext.emotes import (
     get_emotes_async,
 )
 from extensions.cache_commands import cache_commands
+from extensions.db_snapshot import snapshot_db
+from pathlib import Path
 # from ext.web import app
-
-DEFAULT_MODULE_STATE = False
 
 
 def get_global_config() -> dict:
@@ -488,7 +488,7 @@ async def on_command_error(ctx: commands.Context, error):
         | commands.NotOwner,
     ):
         e = Message(
-            message="### you don't have permissions to run this command.",
+            message="you don't have permissions to run this command.",
             accent_color=Color.negative,
         )
         await ctx.reply(
@@ -655,8 +655,7 @@ async def on_ready():
         await ctx.reply(view=e, ephemeral=True, mention_author=False)
 
 
-@tasks.loop(seconds=15.0)
-async def maintenance_loop():
+async def command_cache_cycle():
     try:
         async with aiofiles.open(".last_command_cache", "r") as f:
             content = await f.read()
@@ -672,6 +671,42 @@ async def maintenance_loop():
         last_cache = int(time.time())
         logger.debug("caching commands - no cache file found")
         await cache_commands(client)
+
+
+async def db_snapshot_cycle():
+    os.makedirs("snapshots", exist_ok=True)
+    snapshot_dir_files = os.listdir(Path("snapshots"))
+    snapshots = [Path(f).stem for f in snapshot_dir_files]
+    snapshot_dates = []
+    interval = get_global_config().get("db_snapshot_interval_days", 7)
+    if interval == 0:
+        return
+    for snapshot in snapshots:
+        snapshot_dates.append(datetime.datetime.strptime(snapshot, "%d-%m-%Y_%H.%M.%S"))
+    if not snapshot_dates:
+        logger.info("taking a database snapshot - none were made yet")
+        await snapshot_db()
+        return
+    if datetime.datetime.now() - max(snapshot_dates) > datetime.timedelta(
+        days=interval
+    ):
+        logger.info("taking a database snapshot")
+        await snapshot_db()
+        return
+    if len(snapshots) > 10:
+        os.remove(
+            Path.joinpath(
+                Path("snapshots"),
+                Path(str(min(snapshot_dates).strftime("%d-%m-%Y_%H.%M.%S")) + ".db"),
+            )
+        )
+        logger.info(f"there are over 10 snapshots, removed {min(snapshot_dates)}.db")
+
+
+@tasks.loop(seconds=15.0)
+async def maintenance_loop():
+    await command_cache_cycle()
+    await db_snapshot_cycle()
 
 
 def main():

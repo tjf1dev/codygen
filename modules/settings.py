@@ -5,11 +5,14 @@ import discord
 from main import Color, get_prefix, logger
 import aiosqlite
 import json
+from typing import cast
+from models import Codygen
 from views import InitStartLayout, SettingsModulesLayout
 from PIL import Image
 from io import BytesIO
-from ext import errors
 from ext.utils import setup_guild
+from models import Cog
+from ext.config import DEFAULT_MODULE_STATE
 
 # enabling this allows using a prefixed command for /settings init
 no_app_force = False
@@ -25,10 +28,11 @@ def recursive_update(original: dict, template: dict) -> dict:
     return original
 
 
-class settings(commands.Cog):
+class settings(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "settings to manage your bot instance."
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -64,9 +68,24 @@ class settings(commands.Cog):
                 "SELECT module_settings FROM guilds WHERE guild_id=?", (ctx.guild.id,)
             )
         ).fetchone()
-        if not res:
-            raise errors.CodygenError("module data uninitialized. try again")
-        settings = json.loads(res[0])
+        if not res or res[0] == "{}":
+            bot = cast(Codygen, self.bot)
+            all_modules = bot.cogs
+            base_modules = {
+                k: v
+                for k, v in all_modules.items()
+                if not v.hidden and k != self.__cog_name__
+            }
+            settings = {m: DEFAULT_MODULE_STATE for m in base_modules.keys()}
+            logger.debug(f"after processing: {all_modules} {base_modules} {settings}")
+            await db.execute(
+                "UPDATE guilds SET module_settings=? WHERE guild_id=?",
+                (json.dumps(settings, indent=4), ctx.guild.id),
+            )
+
+            await db.commit()
+        else:
+            settings = json.loads(res[0])
         await msg.edit(
             view=SettingsModulesLayout(self.bot, settings, ctx.author.id), content=""
         )

@@ -4,7 +4,7 @@ import os
 import traceback
 import sys
 import discord
-from discord.ext import commands, ipcx
+from discord.ext import ipcx
 from ext.logger import logger
 from discord import Permissions
 from dataclasses import dataclass
@@ -12,6 +12,7 @@ from ext.utils import parse_commands
 from discord.abc import GuildChannel
 from models import Codygen
 from typing import cast, Any
+from models import Cog
 
 
 class ChannelSerializer:
@@ -212,10 +213,11 @@ def has_permissions_ipc(*, permissions: Permissions):
 FORBIDDEN_KEYS = {"config_ver", "timestamp"}
 
 
-class dashboard(commands.Cog):
+class dashboard(Cog):
     def __init__(self, bot: Codygen):
         self.bot = bot
         self.db: aiosqlite.Connection = bot.db
+        self.hidden = True
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             True, False, False
         )

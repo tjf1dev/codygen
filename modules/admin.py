@@ -1,5 +1,7 @@
 import discord
 import asyncio
+import os
+import datetime
 from discord.ext import commands
 from main import (
     logger,
@@ -9,11 +11,16 @@ import aiofiles
 from ext.ui_base import Message
 from models import Codygen
 from typing import cast
+from models import Cog
+from pathlib import Path
+from ext.utils import timestamp
+from extensions.db_snapshot import snapshot_db
 
 
-class admin(commands.Cog):
+class admin(Cog):
     def __init__(self, bot):
-        self.bot = cast(Codygen, bot)  # pyright: ignore[reportAttributeAccessIssue]
+        self.bot = cast(Codygen, bot)
+        self.hidden = True
         self.description = "commands for bot administrators. for development purposes"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
@@ -23,7 +30,6 @@ class admin(commands.Cog):
         name="admin",
         description="commands for bot administrators. for development purposes",
         invoke_without_command=True,
-        aliases=["a"],
     )
     async def admin(self, ctx: commands.Context):
         pass
@@ -225,6 +231,56 @@ class admin(commands.Cog):
                 discord.Object(ctx.bot.user.id),
             )
             exit()
+
+    @commands.is_owner()
+    @admin.group(name="snapshot", description="management of database snapshots")
+    async def snapshot(self, ctx: commands.Context): ...
+    @commands.is_owner()
+    @snapshot.group(name="create", description="creates a db snapshot")
+    async def snapshot_create(self, ctx: commands.Context):
+        fname = await snapshot_db()
+        await ctx.reply(view=Message(f"snapshot `{fname}` created successfully."))
+
+    @commands.is_owner()
+    @snapshot.group(name="status", description="displays status of db snapshots")
+    async def snapshot_status(self, ctx: commands.Context):
+        snapshots_dir = os.listdir("snapshots")
+        snapshot_dir_path = Path("snapshots")
+
+        def parse_snapshot(f):
+            try:
+                return datetime.datetime.strptime(Path(f).stem, "%d-%m-%Y_%H.%M.%S")
+            except ValueError:
+                return datetime.datetime.min
+
+        snapshots_dir_sorted = sorted(snapshots_dir, key=parse_snapshot, reverse=True)
+
+        def format_size(f):
+            size = (snapshot_dir_path / f).stat().st_size
+            for unit in ["B", "KB", "MB", "GB"]:
+                if size < 1024:
+                    return f"{size:.1f}{unit}"
+                size /= 1024
+            return f"{size:.1f}TB"
+
+        lines = []
+        for s in snapshots_dir_sorted:
+            dt = parse_snapshot(s)
+            timestamp_str = timestamp(dt.timestamp())
+            size_str = format_size(s)
+            prefix = "**" if s == snapshots_dir_sorted[0] else ""
+            suffix = "**" if s == snapshots_dir_sorted[0] else ""
+            latest_note = " *(latest)*" if s == snapshots_dir_sorted[0] else ""
+            lines.append(
+                f"{prefix}`{s}`{suffix} - {timestamp_str} - {size_str}{latest_note}"
+            )
+
+        await ctx.reply(
+            view=Message(
+                f"## {len(snapshots_dir)} snapshot{'s' if len(snapshots_dir) != 1 else ''}:\n"
+                + "\n".join(lines)
+            )
+        )
 
     # @commands.is_owner()
     # @admin.command(

@@ -6,6 +6,7 @@ from .info.info_user import UserInfoLayout
 from .level.level_up import LevelupLayout
 from .level.level_boosts import LevelBoostsLayout
 from .level.level_refresh import LevelRefreshSummaryLayout
+from .level.level_setup import LevelSetupLayout, LevelSetupModal
 
 from .about import AboutLayout
 from .changelog import ChangelogLayout
@@ -34,4 +35,6 @@ __all__ = [
     "InitStartLayout",
     "SettingsModulesLayout",
     "GuessLayout",
+    "LevelSetupModal",
+    "LevelSetupLayout",
 ]

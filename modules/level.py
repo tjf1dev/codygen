@@ -9,11 +9,18 @@ from main import logger
 from ext.utils import xp_to_level, level_to_xp
 import aiosqlite
 from ext.ui_base import Message
-from views import LevelRefreshSummaryLayout, LevelBoostsLayout, LevelupLayout
+from views import (
+    LevelRefreshSummaryLayout,
+    LevelBoostsLayout,
+    LevelupLayout,
+    LevelSetupModal,
+    LevelSetupLayout,
+)
 from ext.colors import Color
 from typing import Any
 from models import Codygen
 import ext.errors
+from models import Cog
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -235,7 +242,7 @@ async def reward_xp(
             logger.error(f"failed to remove roles from {member}: {e}")
 
 
-class level(commands.Cog):
+class level(Cog):
     def __init__(self, bot):
         self.bot: Codygen = bot
         self.description = "track and reward users for activity"
@@ -243,6 +250,7 @@ class level(commands.Cog):
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             guilds=True, dms=False, private_channels=False
         )
+        self.hidden = False
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
@@ -839,47 +847,19 @@ class level(commands.Cog):
     async def rewards(self, ctx: commands.Context):
         pass
 
-    # todo interactive guide
+    # todo interactive guide DONE
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_guild_permissions(administrator=True)
     @level.command(name="setup", description="setup leveling settings")
-    async def setup(
-        self,
-        ctx: commands.Context,
-        levelup_channel: discord.TextChannel | None = None,
-        xp_per_message: int | None = None,
-    ):
-        if not ctx.guild:
+    async def setup(self, ctx: commands.Context):
+        if ctx.interaction:
+            await ctx.interaction.response.send_modal(LevelSetupModal(self.bot))
             return
-        db = self.bot.db
-        if levelup_channel is None and xp_per_message is None:
-            raise ext.errors.CodygenUserError(
-                "levelup channel or level per message is required (hint: use the slash command)\nusage: level setup [levelup_channel] [xp_per_message]\nexample: level setup #levelup 10"
-            )
-
-        columns = []
-        params = []
-
-        if levelup_channel is not None:
-            columns.append("levelup_channel=?")
-            params.append(levelup_channel.id)
-
-        if xp_per_message is not None:
-            columns.append("level_per_message=?")
-            params.append(xp_per_message)
-
-        params.append(ctx.guild.id)
-
-        query = f"UPDATE guilds SET {', '.join(columns)} WHERE guild_id=?"
-        await db.execute(query, params)
-
         await ctx.reply(
-            view=Message(
-                f"## success\n{f'`channel:` {levelup_channel.mention}' if levelup_channel else ''}\n{f'`xp per message:` `{xp_per_message}`' if xp_per_message else ''}",
-                accent_color=Color.positive,
-            ),
+            view=LevelSetupLayout(self.bot, ctx.author.id),
             allowed_mentions=discord.AllowedMentions.none(),
+            ephemeral=True,
         )
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)

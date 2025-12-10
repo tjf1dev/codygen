@@ -6,7 +6,7 @@ import time
 from main import logger, verify, get_guild_config
 
 
-class ticket(commands.Cog):
+class ticket(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "commands to manage tickets"
