@@ -6,12 +6,13 @@ from ext.utils import setup_guild
 from ext.pagination import Paginator
 from discord.ui import TextDisplay
 from ext.emotes import get_emotes_async, get_emotes_from_assets
+from models import Cog
 
 
-class testing(commands.Cog):
+class testing(Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.description = ""
+        self.description = "test stuff for non-release instances"
         self.hidden = True
 
     async def cog_load(self):
@@ -25,6 +26,12 @@ class testing(commands.Cog):
     async def flag(self, ctx: commands.Context, *, flags: str):
         res = parse_flags(flags)
         await ctx.reply(str(res))
+
+    @commands.is_owner()
+    @test.command("db")
+    async def db(self, ctx: commands.Context, *, query: str):
+        await ctx.reply(await (await self.bot.db.execute(query)).fetchall())
+        self.bot.db.commit()
 
     @test.command("guildsetup")
     async def guildsetup(self, ctx: commands.Context):

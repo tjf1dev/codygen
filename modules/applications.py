@@ -4,15 +4,17 @@ from discord import app_commands
 from main import Color, custom_api_request
 from dateutil import parser
 from ext.logger import logger
+from models import Cog
 
 
-class applications(commands.Cog):
+class applications(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "manage server applications, if you have them enabled."
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             True, False, False
         )
+        self.hidden = False
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(

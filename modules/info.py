@@ -8,6 +8,7 @@ from ext.logger import logger
 from views import UserInfoLayout, ServerInfoLayout
 from ext.utils import parse_commands
 from ext.ui_base import Message
+from models import Cog
 
 
 async def avg_color(url):
@@ -21,11 +22,12 @@ async def avg_color(url):
     return average_color
 
 
-class info(commands.Cog):
+class info(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "pretty self explanatory"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

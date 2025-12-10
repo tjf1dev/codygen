@@ -2,12 +2,14 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from main import logger, Color
+from models import Cog
 
 
-class moderation(commands.Cog):
+class moderation(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "commands to help you manage your community."
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

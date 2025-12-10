@@ -15,6 +15,7 @@ import aiofiles
 from ext.ui_base import Message
 import ext.errors
 from typing import cast
+from models import Cog
 
 
 async def get_average_color(url):
@@ -207,13 +208,14 @@ def generate_state_hash(user_id: int, secret: str) -> str:
     return base64.urlsafe_b64encode(digest)[:12].decode()
 
 
-class fm(commands.Cog):
+class fm(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = (
             "use your Last.fm integration to check what you're listening to."
         )
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
+        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

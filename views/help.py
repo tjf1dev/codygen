@@ -8,7 +8,7 @@ from ext.errors import CodygenError
 
 
 class HelpSelect(discord.ui.Select):
-    def __init__(self, bot):
+    def __init__(self, bot: Codygen):
         self.bot: Codygen = bot
         options = []
 
@@ -19,7 +19,7 @@ class HelpSelect(discord.ui.Select):
         )
         if bot.cogs:
             for cog_name, cog in bot.cogs.items():
-                if cog_name.lower() in ["jishaku"]:
+                if cog.hidden and bot.release:
                     continue
                 cog_commands = list(cog.walk_commands())
 

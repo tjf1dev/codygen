@@ -15,6 +15,7 @@ from io import BytesIO
 from typing import cast
 from ext.ui_base import Message
 from main import get_prefix
+from models import Cog
 
 
 async def image_url_to_gif(url: str) -> str:
@@ -106,10 +107,11 @@ async def convert_to_gif(interaction: discord.Interaction, message: discord.Mess
             logger.warning(f"Failed to delete {file.fp.name}: {e}")
 
 
-class utility(commands.Cog):
+class utility(Cog):
     def __init__(self, bot):
         self.bot = bot
         self.description = "helpful tools you might need"
+        self.hidden = False
 
     # hey, for self-hosted users: #! please don’t remove this command
     # i get it, you want your own bot, but at least give me some credit for this

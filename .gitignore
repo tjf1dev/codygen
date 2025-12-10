@@ -25,10 +25,12 @@ logs
 .dmypy.json
 
 modules/tests.py
+
 *.db
 *.db.backup
 *.db-wal
 *.db-shm
+snapshots
 
 node_modules
 .last_command_cache
