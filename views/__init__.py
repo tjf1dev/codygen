@@ -13,7 +13,8 @@ from .help import HelpLayout
 from .ping import PingLayout
 from .add import AddLayout
 
-from .settings_init import InitStartLayout
+from .settings.init import InitStartLayout
+from .settings.modules import SettingsModulesLayout
 
 from .fun.guess import GuessLayout
 
@@ -31,5 +32,6 @@ __all__ = [
     "PingLayout",
     "AddLayout",
     "InitStartLayout",
+    "SettingsModulesLayout",
     "GuessLayout",
 ]

@@ -23,14 +23,14 @@ class AboutLayout(LayoutView):
                 f"[`contribute to codygen`](<https://github.com/tjf1dev/codygen>)\n{contributors}"
             )
         ).add_item(Separator()).add_item(
-            TextDisplay(
+            TextDisplay(    
                 "## support\n"
                 "[`sponsor me on github <3`](<https://github.com/sponsors/tjf1dev>)\n"
                 "it takes a long time making a bot, any support would be appreciated! :3"
             )
         ).add_item(Separator()).add_item(
             TextDisplay(
-                "thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible </3"
+                "thank you to **EVERYONE** (yes, you too) for making, contributing to, using codygen. without you, all of this wouldnt be possible <3"
             )
         )
         self.add_item(container)

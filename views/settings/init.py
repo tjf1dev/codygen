@@ -4,7 +4,7 @@ from ext.colors import Color
 from ext.logger import logger
 import os
 from discord.ui import MediaGallery, Button
-
+from ext.utils import setup_guild
 
 class InitStartButton(discord.ui.Button):
     def __init__(self, cog):
@@ -34,7 +34,7 @@ class InitStartButton(discord.ui.Button):
         await interaction.edit_original_response(view=InitStartLayout(self.cog))
         logger.debug(f"starting initialization for guild {interaction.guild.id}")
 
-        gen = self.cog.setup_guild(interaction.guild, gtype=1)
+        gen = setup_guild(self.cog.bot, interaction.guild, gtype=1)
         async for view in gen:
             await interaction.followup.send(view=view, ephemeral=True)
 

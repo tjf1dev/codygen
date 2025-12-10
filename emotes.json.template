@@ -1,0 +1,4 @@
+{
+    "readme": "this file contains data about the emotes that the bot has automatically created. you do not need to modify this file, as the data will be generated upon startup.",
+    "emotes": {}
+}

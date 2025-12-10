@@ -1,12 +1,16 @@
 import base64
 import datetime
 import aiohttp
+import aiosqlite
+import asyncio
 from ext.logger import logger
 import os
 import sys
 import discord
-from typing import Tuple, Optional, Any, List
+from typing import Tuple, Optional, Any, List, AsyncGenerator
 from models import Codygen
+from ext.ui_base import Message
+from ext.colors import Color
 
 
 def state_to_id(state: str) -> str:
@@ -402,7 +406,6 @@ def get_required_env() -> list:
             r.append(line.split("=")[0])
     return r
 
-
 def ensure_env():
     """
     Checks that all REQUIRED_ENV keys exist and are non-empty.
@@ -431,3 +434,103 @@ def ensure_env():
 def permissions_to_list(perms: discord.Permissions) -> list:
     enabled = [name.replace("_", " ").title() for name, value in perms if value]
     return enabled if enabled else ["[none]"]
+
+        
+    
+
+async def setup_guild(
+    bot: Codygen, guild: discord.Guild, gtype: int = 1
+) -> AsyncGenerator[discord.ui.View | discord.ui.LayoutView, bool]:
+    """
+    Setup (initalize) a guild.
+    Replaces on_guild_join and /settings init functions, and is shared between them.
+    Returns embeds in realtime.
+    Arguments:
+        guild: `discord.Guild` object with the guild to setup.
+        type: 1 = already existing guild, 2 = newly added guild
+    """
+    # gtype spoof for testing
+    # gtype = 2
+    logger.debug(f"now setting up {guild.id}...")
+    message = ""
+    if gtype == 2:
+        message += (
+            f"## welcome! codygen has been successfully added to {guild.name}.\n"
+        )
+    message += f"{'## ' if gtype != 2 else ''}codygen will now attempt to{' automatically' if gtype == 2 else ""} initizalize in your server.\n"
+    message += "> please wait, it can take a while.\n"
+    message += "## support\n> join our [support server](https://discord.gg/WyxN6gsQRH).\n## issues and bugs\n> report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our github repository\n"
+
+    if gtype == 2:
+        message += "-# if something goes wrong: try running the </settings init:1340646304073650308> command in your guild.\n"
+    message += "-# initializer v3"
+    e = Message(
+        message=message,
+        accent_color=Color.purple,
+    )
+    yield e
+    await asyncio.sleep(2)
+    logger.debug("attempting to insert database values")
+    db: aiosqlite.Connection = bot.db
+    try:
+        await db.execute("INSERT INTO guilds (guild_id) VALUES (?)", (guild.id,))
+        logger.debug("made default guild data")
+        config_already_made = False
+    except Exception as e:
+        logger.warning(
+            f"failed when inserting guild data for {guild.id}; {type(e).__name__}: {e}"
+        )
+        config_already_made = True
+    try:
+        await db.execute("INSERT INTO modules (guild_id) VALUES (?)", (guild.id,))
+        logger.debug("made default module data")
+    except Exception as e:
+        logger.warning(
+            f"failed when inserting module data for {guild.id}; {type(e).__name__}: {e}"
+        )
+        pass
+    await db.commit()
+    bot_member = guild.me
+    required_permissions = discord.Permissions(
+        manage_roles=True,
+        manage_channels=True,
+        manage_guild=True,
+        view_audit_log=True,
+        read_messages=True,
+        send_messages=True,
+        manage_messages=True,
+        kick_members=True,
+        ban_members=True,
+        create_instant_invite=True,
+        change_nickname=True,
+        manage_nicknames=True,
+        send_messages_in_threads=True,
+        create_public_threads=True,
+        create_private_threads=True,
+        embed_links=True,
+        attach_files=True,
+        read_message_history=True,
+        mention_everyone=True,
+        use_external_emojis=True,
+        add_reactions=True,
+    )
+    if not bot_member.guild_permissions.is_superset(required_permissions):
+        missing_perms = [
+            perm
+            for perm, value in required_permissions
+            if not getattr(bot_member.guild_permissions, perm)
+        ]
+        permission_error = Message(
+            message=f"# initialization failed: missing permissions\n### missing the following permissions: `{', '.join(missing_perms)}`\nplease fix the permissions and try again!",
+            accent_color=Color.negative,
+        )
+        yield permission_error
+        logger.debug("yielded permission_error")
+
+    stage2 = Message(
+        message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}\n" 
+        "\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run /settings modules in the server to configure modules, or use the dashboard.",
+        accent_color=Color.positive,
+    )
+    yield stage2
+    logger.debug(f"...finished setting up {guild.id}")

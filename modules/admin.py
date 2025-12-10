@@ -196,19 +196,19 @@ class admin(commands.Cog):
             status = discord.Status.online
         activity = discord.Activity(type=type, name=content)
         await self.bot.change_presence(activity=activity, status=status)
-        await ctx.message.add_reaction("✅")
+        await ctx.message.add_reaction(ctx.bot.emote("success").PartialEmoji())
 
     @commands.is_owner()
     @admin.command(
         name="restart", description="fully restarts every instance of the bot"
     )
     async def restart(self, ctx: commands.Context):
-        await ctx.message.add_reaction("➡️")
+        await ctx.message.add_reaction(ctx.bot.emote("limited").PartialEmoji())
 
-        def check(reaction, user):
+        def check(reaction: discord.Reaction, user):
             return (
                 user == ctx.author
-                and str(reaction.emoji) == "➡️"
+                and str(reaction.emoji) == ctx.bot.emote("limited").string()
                 and reaction.message.id == ctx.message.id
             )
 
@@ -217,9 +217,13 @@ class admin(commands.Cog):
                 "reaction_add", timeout=5.0, check=check
             )
         except asyncio.TimeoutError:
-            await ctx.reply("-# timed out")
+            await ctx.message.add_reaction(ctx.bot.emote("failure").PartialEmoji())
         else:
-            await ctx.reply("-# restarting...")
+            await ctx.message.add_reaction(ctx.bot.emote("success").PartialEmoji())
+            await ctx.message.remove_reaction(
+                ctx.bot.emote("limited").PartialEmoji(),
+                discord.Object(ctx.bot.user.id),
+            )
             exit()
 
     # @commands.is_owner()

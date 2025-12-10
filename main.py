@@ -29,14 +29,20 @@ from db import connect, create_table
 from ext.utils import get_command, parse_flags, get_required_env, ensure_env
 from discord.ext import ipcx
 from ext.ui_base import Message
+from ext.config import DEFAULT_CONFIG
 from models import Codygen
 from typing import cast
 from ext.errors import CodygenError
-from traceback import format_exception
+from ext.emotes import (
+    check_if_all_emotes_exist,
+    create_emotes_from_assets,
+    create_emotes_json_file,
+    get_emotes_async,
+)
 from extensions.cache_commands import cache_commands
 # from ext.web import app
 
-DEFAULT_GLOBAL_CONFIG = open("config.json.template").read()
+DEFAULT_MODULE_STATE = False
 
 
 def get_global_config() -> dict:
@@ -44,6 +50,7 @@ def get_global_config() -> dict:
     Loads config.json, or if it doesn't exist / is invalid JSON,
     writes out DEFAULT_GLOBAL_CONFIG and returns it.
     """
+    DEFAULT_GLOBAL_CONFIG = json.dumps(DEFAULT_CONFIG, indent=4)
     try:
         with open("config.json", "r") as f:
             return json.load(f)
@@ -51,6 +58,29 @@ def get_global_config() -> dict:
         with open("config.json", "w") as f:
             json.dump(DEFAULT_GLOBAL_CONFIG, f, indent=4)
         return DEFAULT_GLOBAL_CONFIG  # type: ignore
+
+
+def update_config_if_needed():
+    """
+    loads config.json and compares it with DEFAULT_CONFIG.
+    adds missing keys without modifying existing ones.
+    returns the updated config dict and writes back to file if changed.
+    """
+    with open("config.json", "r") as f:
+        cfg = json.load(f)
+
+    updated = False
+
+    for k, v in DEFAULT_CONFIG.items():
+        if k not in cfg:
+            cfg[k] = v
+            updated = True
+
+    if updated:
+        with open("config.json", "w") as f:
+            json.dump(cfg, f, indent=4)
+
+    return cfg
 
 
 # pre-init functions
@@ -231,7 +261,7 @@ version = open("VERSION").read()
 # used to determine testing modules etc.
 release = not version.endswith("alpha")
 if not version:
-    logger.error("something went wrong cant load version")
+    logger.error("something went wrong -- can't load version")
 # bot definitions
 intents = discord.Intents.all()
 
@@ -368,13 +398,36 @@ async def on_command(ctx: commands.Context):
     )
 
 
+async def update_guild_modules(
+    con: aiosqlite.Connection,
+    guild_id,
+    bot: Codygen | commands.Bot,
+    current_settings: dict,
+) -> dict:
+    modules = bot.cogs
+    for module in modules.keys():
+        if module not in current_settings.keys():
+            current_settings[module] = DEFAULT_MODULE_STATE
+    settings_str = json.dumps(current_settings, indent=4)
+    await con.execute(
+        "UPDATE guilds SET module_settings=? WHERE guild_id=?",
+        (
+            settings_str,
+            guild_id,
+        ),
+    )
+    await con.commit()
+    return current_settings
+
+
+# TODO CUSTOM PERMISSION CHECK (so it can be customized with roles users etc not just permissions)
 @client.check
 async def is_module_enabled(ctx: commands.Context):
     if ctx.guild is None:
         logger.debug("allowing command: case 1")
         return True
     if ctx.cog:
-        if ctx.cog.qualified_name.lower() == "jishaku":
+        if ctx.cog.qualified_name.lower() in ["settings", "admin"]:
             logger.debug("allowing command: case 2")
             return True
 
@@ -393,16 +446,20 @@ async def is_module_enabled(ctx: commands.Context):
     cur: aiosqlite.Cursor = await con.cursor()
     logger.debug(f"cog: {ctx.cog.qualified_name}")
     res = await cur.execute(
-        f"SELECT {ctx.cog.qualified_name.lower()} FROM modules WHERE guild_id=?",
+        "SELECT module_settings FROM guilds WHERE guild_id=?",
         (ctx.guild.id,),
     )
     row = await res.fetchone()
-    is_enabled = bool(row[0]) if row else False
+    settings = json.loads(row[0]) if row and row[0] else {}
+    is_enabled = settings.get(ctx.cog.qualified_name.lower(), None)
+    if is_enabled is None:
+        is_enabled = DEFAULT_MODULE_STATE
+        await update_guild_modules(con, ctx.guild.id, client, settings)
 
-    if not is_enabled:
+    if is_enabled is False:
         await ctx.reply(
             view=Message(
-                "## this command comes from a disabled module.",
+                f"this command comes from a disabled module.\n-# `{ctx.cog.__cog_name__}`",
                 accent_color=Color.negative,
             ),
             ephemeral=True,
@@ -496,7 +553,7 @@ async def on_ready():
     await refresh_commands()
     start_time = time.time()
     logger.info("loading modules..")
-    await client.load_extension("jishaku")  # jsk #* pip install jishaku
+    # await client.load_extension("jishaku")  # jsk #* pip install jishaku
     config = get_global_config()
     blacklist = config["cogs"]["blacklist"]
     for filename in os.listdir("modules"):
@@ -521,8 +578,36 @@ async def on_ready():
         return
 
     admin_group = admin_cog.admin  # type:ignore
-    if not cache_commands_task.is_running():
-        cache_commands_task.start()
+    if not maintenance_loop.is_running():
+        maintenance_loop.start()
+    if not await check_if_all_emotes_exist(client):
+        logger.debug("creating emotes...")
+        emote_list = await client.fetch_application_emojis()
+        created_emotes = await create_emotes_from_assets(emote_list, client)
+        if created_emotes:
+            logger.info(
+                f"made {len(created_emotes)} new emote{'s' if len(created_emotes) != 1 else ''}"
+            )
+        else:
+            logger.debug("no new emotes created.")
+        logger.debug("updating json file...")
+        merged_emotes = []
+
+        seen = set()
+        for emoji in (
+            [em._to_partial() for em in created_emotes]
+            if created_emotes
+            else emote_list
+        ) + ([em._to_partial() for em in emote_list] if created_emotes else []):
+            key = (emoji.name, getattr(emoji, "id", None))
+            if key not in seen:
+                seen.add(key)
+                merged_emotes.append(emoji)
+
+        await create_emotes_json_file(merged_emotes, client)
+    else:
+        logger.debug("emotes are up to date")
+    client.emotes = await get_emotes_async()
 
     @commands.is_owner()
     @admin_group.command(name="sync", description="syncs app commands")
@@ -571,7 +656,7 @@ async def on_ready():
 
 
 @tasks.loop(seconds=15.0)
-async def cache_commands_task():
+async def maintenance_loop():
     try:
         async with aiofiles.open(".last_command_cache", "r") as f:
             content = await f.read()
@@ -591,9 +676,15 @@ async def cache_commands_task():
 
 def main():
     ensure_env()
+    conf_update = update_config_if_needed()
+    if conf_update:
+        logger.info("updated config")
+    else:
+        logger.debug("config template hasn't been updated")
     client.run(TOKEN)
 
 
 if __name__ == "__main__":
     logger.info("starting codygen")
+
     main()

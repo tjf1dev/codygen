@@ -3,6 +3,7 @@ from typing import Any
 import logging
 import aiosqlite
 from discord.ext import ipcx
+from .emote import Emote
 
 
 class Codygen(commands.AutoShardedBot):
@@ -19,3 +20,7 @@ class Codygen(commands.AutoShardedBot):
     db: aiosqlite.Connection
     start_time: float
     full_commands: list | dict
+    emotes: list[Emote]
+
+    def emote(self, name: str):
+        return next(em for em in self.emotes if em.name == name)

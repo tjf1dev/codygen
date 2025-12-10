@@ -30,3 +30,8 @@ class LastfmLoggedOutError(CodygenError):
 
 class ModuleDisabledError(CodygenError):
     pass
+
+class UnknownEmoteError(CodygenError):
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.message = f"Can't find/use emote '{message}' in config. Please make sure it exists and has a valid id."

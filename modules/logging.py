@@ -212,7 +212,6 @@ class logging(commands.Cog):
         if not webhook_row:
             logger.warning(f"no webhook found: {webhook_row}, creating one...")
             webhook_row = await self.create_webhook(log_channel_obj)
-
         msg_title = discord.ui.TextDisplay(f"## {title}")
         msg_sep = discord.ui.Separator()
         if type[0] == 1:

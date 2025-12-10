@@ -21,6 +21,7 @@ async def create_table():
                 level_per_message INTEGER DEFAULT 0,
                 levelup_channel INTEGER,
                 logging_settings TEXT DEFAULT '{{}}',
+                module_settings TEXT DEFAULT '{{}}',
                 config_ver INTEGER DEFAULT {config_ver},
                 timestamp REAL
             )"""

@@ -39,3 +39,6 @@ package-lock.json
 
 # this file is auto-generated before build
 commands.md
+
+# emote file
+emotes.json
