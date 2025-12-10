@@ -31,6 +31,7 @@ class LastfmLoggedOutError(CodygenError):
 class ModuleDisabledError(CodygenError):
     pass
 
+
 class UnknownEmoteError(CodygenError):
     def __init__(self, message: str):
         super().__init__(message)

@@ -406,6 +406,7 @@ def get_required_env() -> list:
             r.append(line.split("=")[0])
     return r
 
+
 def ensure_env():
     """
     Checks that all REQUIRED_ENV keys exist and are non-empty.
@@ -435,8 +436,6 @@ def permissions_to_list(perms: discord.Permissions) -> list:
     enabled = [name.replace("_", " ").title() for name, value in perms if value]
     return enabled if enabled else ["[none]"]
 
-        
-    
 
 async def setup_guild(
     bot: Codygen, guild: discord.Guild, gtype: int = 1
@@ -454,10 +453,8 @@ async def setup_guild(
     logger.debug(f"now setting up {guild.id}...")
     message = ""
     if gtype == 2:
-        message += (
-            f"## welcome! codygen has been successfully added to {guild.name}.\n"
-        )
-    message += f"{'## ' if gtype != 2 else ''}codygen will now attempt to{' automatically' if gtype == 2 else ""} initizalize in your server.\n"
+        message += f"## welcome! codygen has been successfully added to {guild.name}.\n"
+    message += f"{'## ' if gtype != 2 else ''}codygen will now attempt to{' automatically' if gtype == 2 else ''} initizalize in your server.\n"
     message += "> please wait, it can take a while.\n"
     message += "## support\n> join our [support server](https://discord.gg/WyxN6gsQRH).\n## issues and bugs\n> report all issues or bugs in the [issues tab](https://github.com/tjf1dev/codygen) of our github repository\n"
 
@@ -528,7 +525,7 @@ async def setup_guild(
         logger.debug("yielded permission_error")
 
     stage2 = Message(
-        message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}\n" 
+        message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}\n"
         "\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run /settings modules in the server to configure modules, or use the dashboard.",
         accent_color=Color.positive,
     )

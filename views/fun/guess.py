@@ -10,7 +10,6 @@ from discord.ui import (
     Button,
     Thumbnail,
     Label,
-    UserSelect,
     ActionRow,
     TextInput,
 )

@@ -6,6 +6,7 @@ import os
 from discord.ui import MediaGallery, Button
 from ext.utils import setup_guild
 
+
 class InitStartButton(discord.ui.Button):
     def __init__(self, cog):
         super().__init__()

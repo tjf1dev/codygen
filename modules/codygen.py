@@ -4,7 +4,7 @@ import discord
 import os
 import aiohttp
 from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout, AddLayout
-from main import logger, Color, get_global_config
+from main import logger, get_global_config
 from ext import errors
 
 

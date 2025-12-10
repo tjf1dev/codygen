@@ -15,7 +15,6 @@ import aiohttp
 import json
 import aiofiles
 from quart import render_template
-import asyncio
 
 __import__("dotenv").load_dotenv()
 
@@ -345,6 +344,3 @@ async def root():
 async def main():
     logger.ok("starting webserver")
     await serve(app, config)
-
-
-
