@@ -19,6 +19,11 @@ from .settings.modules import SettingsModulesLayout
 
 from .fun.guess import GuessLayout
 
+from .fm.fm import fmLayout
+from .fm.lastfm_auth import (
+    lastfmMessageWithLogin,
+)
+
 # TODO bring fm module layouts here
 __all__ = [
     "LoggingSetupLayout",
@@ -37,4 +42,6 @@ __all__ = [
     "GuessLayout",
     "LevelSetupModal",
     "LevelSetupLayout",
+    "fmLayout",
+    "lastfmMessageWithLogin",
 ]

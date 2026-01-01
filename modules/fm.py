@@ -1,7 +1,4 @@
-import base64
-import hmac
 import aiohttp
-import hashlib
 from PIL import Image
 from io import BytesIO
 import discord
@@ -16,6 +13,7 @@ from ext.ui_base import Message
 import ext.errors
 from typing import cast
 from models import Cog
+from views import fmLayout, lastfmMessageWithLogin
 
 
 async def get_average_color(url):
@@ -23,189 +21,11 @@ async def get_average_color(url):
         async with session.get(url) as resp:
             content = await resp.read()
             img = Image.open(BytesIO(content)).convert("RGB")
-            pixels = list(img.getdata())
+            pixels = list(img.getdata())  # type: ignore
             r = sum(p[0] for p in pixels) // len(pixels)
             g = sum(p[1] for p in pixels) // len(pixels)
             b = sum(p[2] for p in pixels) // len(pixels)
             return (r, g, b)
-
-
-class fmSection(discord.ui.Section):
-    def __init__(self, track_info: dict):
-        accessory = discord.ui.Thumbnail(media=track_info["image"])
-
-        super().__init__(accessory=accessory)
-        display_text = (
-            f"## [{track_info['track']}]({track_info['url']})\n"
-            f"{track_info['artist']} {'• ' if track_info.get('album', None) else ''}{track_info.get('album', '')}\n"
-            f"{track_info['track_scrobble_count']} scrobbles, "
-            f"{track_info['scrobble_count']} total"
-        )
-
-        self.add_item(discord.ui.TextDisplay(display_text))
-
-
-class fmActionRow(discord.ui.ActionRow):
-    def __init__(self, track_info: dict):
-        super().__init__()
-        self.voted_users = {}  # {user_id: "up" or "down"}
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
-        emoji="<:downvote:1388512428484198482>",
-        label="0",
-    )
-    async def downvote(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        await interaction.response.defer()
-        user_id = interaction.user.id
-        buttons = [cast(discord.ui.Button, b) for b in self.children]
-        upvote_button = next(
-            b for b in buttons if b.emoji and getattr(b.emoji, "name", None) == "upvote"
-        )
-
-        current_vote = self.voted_users.get(user_id)
-
-        if current_vote == "down":
-            self.voted_users.pop(user_id)
-            old_label = button.label or "0"
-            button.label = str(int(old_label) - 1)
-        elif current_vote == "up":
-            self.voted_users[user_id] = "down"
-            old_label = button.label or "0"
-            button.label = str(int(old_label) + 1)
-            old_upvote_label = upvote_button.label or "0"
-            upvote_button.label = str(int(old_upvote_label) - 1)
-        else:
-            self.voted_users[user_id] = "down"
-            old_label = button.label or "0"
-            button.label = str(int(old_label) + 1)
-
-        await interaction.edit_original_response(view=self.view)
-
-    @discord.ui.button(
-        style=discord.ButtonStyle.secondary,
-        emoji="<:upvote:1388512426059759657>",
-        label="0",
-    )
-    async def upvote(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        user_id = interaction.user.id
-
-        buttons = [cast(discord.ui.Button, b) for b in self.children]
-        downvote_button = next(
-            b
-            for b in buttons
-            if b.emoji and getattr(b.emoji, "name", None) == "downvote"
-        )
-        current_vote = self.voted_users.get(user_id)
-
-        if current_vote == "up":
-            self.voted_users.pop(user_id)
-            old_label = button.label or "0"
-            button.label = str(int(old_label) - 1)
-        elif current_vote == "down":
-            self.voted_users[user_id] = "up"
-            old_label = button.label or "0"
-            button.label = str(int(old_label) + 1)
-            old_down_label = downvote_button.label or "0"
-            downvote_button.label = str(int(old_down_label) - 1)
-        else:
-            self.voted_users[user_id] = "up"
-            old_label = button.label or "0"
-            button.label = str(int(old_label) + 1)
-
-        await interaction.edit_original_response(view=self.view)
-
-
-class fmLayout(discord.ui.LayoutView):
-    def __init__(
-        self, interaction: discord.Interaction, track_info: dict, timeout=None
-    ):
-        super().__init__()
-        container = discord.ui.Container()
-        container.add_item(fmSection(track_info))
-        # if interaction.guild:
-        container.add_item(fmActionRow(track_info))
-        self.add_item(container)
-
-
-class lastfmMessageWithLogin(discord.ui.LayoutView):
-    def __init__(self, message, **container_options):
-        super().__init__()
-        container = discord.ui.Container(**container_options)
-        self.add_item(container)
-        container.add_item(discord.ui.TextDisplay(message))
-        container.add_item(lastfmAuthPromptActionRow())
-
-
-class lastfmAuthPromptActionRow(discord.ui.ActionRow):
-    def __init__(self):
-        super().__init__()
-
-    @discord.ui.button(label="Login", style=discord.ButtonStyle.secondary)
-    async def auth_button(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        try:
-            view = lastfmAuthFinal(interaction)
-            await interaction.response.send_message(view=view, ephemeral=True)
-        except Exception as e:
-            logger.error(f"{type(e)}: {e}")
-
-
-class lastfmLoggedOutError(discord.ui.LayoutView):
-    def __init__(self):
-        super().__init__()
-
-        container = discord.ui.Container()
-        container.add_item(
-            discord.ui.TextDisplay("## Not logged in!\nAuthorize with the button below")
-        )
-        container.add_item(lastfmAuthPromptActionRow())
-        self.add_item(container)
-
-
-class lastfmAuthFinalActionRow(discord.ui.ActionRow):
-    def __init__(self, interaction: discord.Interaction):
-        super().__init__()
-
-        self.add_item(
-            discord.ui.Button(
-                label="Authenticate",
-                url=f"https://www.last.fm/api/auth?api_key={os.environ['LASTFM_API_KEY']}&cb={os.environ['LASTFM_CALLBACK_URL']}?state={generate_full_state(interaction.user.id)}",
-            )
-        )
-
-
-class lastfmAuthFinal(discord.ui.LayoutView):
-    def __init__(self, interaction: discord.Interaction):
-        super().__init__(timeout=None)
-        container = discord.ui.Container()
-        container.add_item(
-            discord.ui.TextDisplay(
-                f"## last.fm authentication\npress the button below to safely authenticate with last.fm as {interaction.user.name}"
-            )
-        )
-        container.add_item(lastfmAuthFinalActionRow(interaction))
-        self.add_item(container)
-
-
-def generate_full_state(user_id: int) -> str:
-    salt = os.getenv("STATE_SALT")
-    if not salt:
-        raise ext.errors.MissingEnvironmentVariable("STATE_SALT")
-    hash = generate_state_hash(user_id, salt)
-    id_enc = base64.b64encode(str(user_id).encode()).decode()
-    return f"{id_enc}@{hash}"
-
-
-def generate_state_hash(user_id: int, secret: str) -> str:
-    user_bytes = str(user_id).encode()
-    secret_bytes = secret.encode()
-    digest = hmac.new(secret_bytes, user_bytes, hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(digest)[:12].decode()
 
 
 class fm(Cog):
@@ -348,7 +168,9 @@ class fm(Cog):
     )
     async def fm(self, ctx: commands.Context):
         try:
-            async with aiofiles.open("data/last.fm/users.json", "r") as f:
+            async with aiofiles.open(
+                "data/last.fm/users.json", "r"
+            ) as f:  # TODO make the lastfm login a db thing
                 content = await f.read()
                 data = json.loads(content)
                 username = (
@@ -368,23 +190,21 @@ class fm(Cog):
                 raise ext.errors.LastfmLoggedOutError()
             else:
                 track_info = cast(dict, track_info_raw[0])
-            if not ctx.interaction:
-                logger.warning("interaction doesnt exist for some reason")
-                return
-            await ctx.reply(
-                view=fmLayout(ctx.interaction, track_info), mention_author=False
-            )
+            # if not ctx.interaction:
+            #     logger.warning("interaction doesnt exist for some reason")
+            #     return
+            await ctx.reply(view=fmLayout(track_info), mention_author=False)
         except FileNotFoundError:
             view = lastfmMessageWithLogin(
                 "## Not logged in!\nPlease use the button below to authenticate with Last.fm"
             )
             await ctx.reply(view=view, ephemeral=True)
-        except Exception as err:
-            view = lastfmMessageWithLogin(
-                f"## An error occured!\nPlease report this to the bot developers. you can also try authenticating again\n```{type(err).__name__}: {str(err)}```",
-                accent_colour=Color.negative,
-            )
-            await ctx.reply(view=view, ephemeral=True)
+        # except Exception as err:
+        #     view = lastfmMessageWithLogin(
+        #         f"## An error occured!\nPlease report this to the bot developers. you can also try authenticating again\n```{type(err).__name__}: {str(err)}```",
+        #         accent_colour=Color.negative,
+        #     )
+        #     await ctx.reply(view=view, ephemeral=True)
 
 
 async def setup(bot):

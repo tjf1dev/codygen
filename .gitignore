@@ -18,7 +18,9 @@ cache/*
 logs/*
 logs
 
-.vscode
+.vscode/*
+!.vscode/settings.json
+
 .idea
 
 .mypy_cache
