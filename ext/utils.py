@@ -11,11 +11,30 @@ from typing import Tuple, Optional, Any, List, AsyncGenerator
 from models import Codygen
 from ext.ui_base import Message
 from ext.colors import Color
+import hmac
+import hashlib
+import ext.errors
 
 
 def state_to_id(state: str) -> str:
     euid = state.split("@")[0]
     return base64.b64decode(euid).decode()
+
+
+def lfm_generate_state_hash(user_id: int, secret: str) -> str:
+    user_bytes = str(user_id).encode()
+    secret_bytes = secret.encode()
+    digest = hmac.new(secret_bytes, user_bytes, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest)[:12].decode()
+
+
+def lfm_generate_full_state(user_id: int) -> str:
+    salt = os.getenv("STATE_SALT")
+    if not salt:
+        raise ext.errors.MissingEnvironmentVariable("STATE_SALT")
+    hash = lfm_generate_state_hash(user_id, salt)
+    id_enc = base64.b64encode(str(user_id).encode()).decode()
+    return f"{id_enc}@{hash}"
 
 
 # TODO add custom value support

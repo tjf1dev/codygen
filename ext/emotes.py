@@ -36,6 +36,23 @@ async def get_emotes_async() -> list[Emote]:
         return [Emote(e["name"], e["id"], e["animated"]) for e in emotes.values()]
 
 
+def get_emote_sync(name: str) -> Emote:
+    """
+    Gets the emote cache, runs _get_emote and returns the found emote
+    This function **blocks** the event loop. It is only recommended for specific use cases.
+    :param name: the name of the emote
+    :type name: str
+    :return: the emote, or None
+    :rtype: Emote | None
+    """
+    with open("emotes.json", "r") as f:
+        cnf_text = f.read()
+        em = _get_emote(name, json.loads(cnf_text))
+        if not em:
+            raise UnknownEmoteError(name)
+        return em
+
+
 async def get_emote_async(name: str) -> Emote:
     """
     Gets the emote cache, runs _get_emote and returns the found emote
