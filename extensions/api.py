@@ -254,7 +254,7 @@ async def invite():
     return redirect(link)
 
 
-@app.route("/lastfm/callback", methods=["GET"])
+@app.route("/api/lastfm/callback", methods=["GET"])
 async def lastfm_callback():
     try:
         logger.debug("received callback")
@@ -325,13 +325,13 @@ config.bind = ["127.0.0.1:8998"]
 config.access_log_format = ""
 
 
-@app.route("/stats", methods=["GET"])
+@app.route("/api/stats", methods=["GET"])
 async def stats():
     data = await ipc.request("stats")
     return data
 
 
-@app.route("/")
+@app.route("/api")
 async def root():
     stats = await ipc.request("stats")
     return {
