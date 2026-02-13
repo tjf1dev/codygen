@@ -11,11 +11,9 @@ from views import InitStartLayout, SettingsModulesLayout
 from PIL import Image
 from io import BytesIO
 from ext.utils import setup_guild
-from models import Cog
+from ext.commands import parse_commands
+from models import Module
 from ext.config import DEFAULT_MODULE_STATE
-
-# enabling this allows using a prefixed command for /settings init
-no_app_force = False
 
 
 def recursive_update(original: dict, template: dict) -> dict:
@@ -28,9 +26,10 @@ def recursive_update(original: dict, template: dict) -> dict:
     return original
 
 
-class settings(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class settings(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "settings to manage your bot instance."
         self.hidden = False
 
@@ -94,17 +93,20 @@ class settings(Cog):
     @commands.has_guild_permissions(administrator=True)
     @settings.command(
         name="init",
-        description="Check if the bot has valid permissions and create a config.",
+        description="check if the bot has valid permissions and create a config.",
     )
     async def init(self, ctx: commands.Context):
-        # no_app_force = True
-        if not ctx.interaction:
-            if not no_app_force:
-                await ctx.reply(
-                    "## a prefixed command won't work for this.\n### please use the </settings init:1338195438494289964> command instead.",
-                    ephemeral=True,
+        if not ctx.interaction and self.bot.release:
+            commands = parse_commands(self.bot.full_commands)
+            init_command_id = next(
+                (m["id"] for m in commands if m["full_name"] == "settings init"), 0
+            )
+            await ctx.reply(
+                view=Message(
+                    f"## a prefixed command won't work for this.\nplease use the </settings init:{init_command_id}> command instead."
                 )
-                return
+            )
+            return
 
         async def prepare_header_image(path: str):
             with Image.open(path) as img:
@@ -116,7 +118,7 @@ class settings(Cog):
                 return discord.File(byte_io, filename="header.png")
 
         await ctx.reply(
-            view=InitStartLayout(self),
+            view=InitStartLayout(self, self.bot),
             ephemeral=True,
             file=await prepare_header_image("assets/images/bannername.png"),
         )
@@ -150,6 +152,13 @@ class settings(Cog):
             "UPDATE guilds SET prefix = ? WHERE guild_id = ?", (prefix, ctx.guild.id)
         )
         if cur.rowcount == 0:
+            await ctx.reply(
+                view=Message(
+                    "something went wrong!\n-# are you sure the server is initialized?",
+                    accent_color=Color.negative,
+                ),
+                mention_author=False,
+            )
             return
 
         await con.commit()

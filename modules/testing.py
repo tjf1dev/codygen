@@ -1,17 +1,19 @@
 from ext.utils import parse_flags
 from discord.ext import commands
-from ext.logger import logger
+import logger
 from ext.ui_base import Message
 from ext.utils import setup_guild
-from ext.pagination import Paginator
+from ext.pager import Paginator
 from discord.ui import TextDisplay
 from ext.emotes import get_emotes_async, get_emotes_from_assets
-from models import Cog
+from models import Module, Codygen
+from typing import cast
 
 
-class testing(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class testing(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=True, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "test stuff for non-release instances"
         self.hidden = True
 
@@ -30,8 +32,10 @@ class testing(Cog):
     @commands.is_owner()
     @test.command("db")
     async def db(self, ctx: commands.Context, *, query: str):
-        await ctx.reply(await (await self.bot.db.execute(query)).fetchall())
-        self.bot.db.commit()
+        await ctx.reply(
+            content=f"{await (await self.bot.db.execute(query)).fetchall()}"
+        )
+        await self.bot.db.commit()
 
     @test.command("guildsetup")
     async def guildsetup(self, ctx: commands.Context):
@@ -55,7 +59,7 @@ class testing(Cog):
         p2 = Message("page 2")
         p3 = Message("# page 3")
         p4 = TextDisplay("page 4")
-        await ctx.reply(view=Paginator([p1, p2, p3, p4], ctx))
+        await ctx.reply(view=Paginator.from_ctx([p1, p2, p3, p4], ctx).to_layout())
 
     @test.command("emote")
     async def emote(self, ctx: commands.Context, emote: str | None = None):
@@ -69,11 +73,15 @@ class testing(Cog):
         )
         for em in emotes:
             content += f"{'-# ' if em.name not in required_emotes else ''}{em.name} (`{em.id}`) - {em}\n"
+        if not any((e not in [em.name for em in emotes] for e in required_emotes)):
+            content += f"-# all {len(required_emotes)} emotes are added!"
+        else:
+            content += "-# one or more emotes are missing!"
         await ctx.reply(view=Message(content))
 
 
 async def setup(bot):
     if bot.release:
-        logger.debug("skipping testing cog - running on release target")
         return
+    logger.debug("adding testing cog - running on non release target")
     await bot.add_cog(testing(bot))

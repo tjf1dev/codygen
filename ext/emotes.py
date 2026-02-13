@@ -6,7 +6,7 @@ import os
 import pathlib
 import asyncio
 from models import Emote
-from ext.logger import logger
+import logger
 from models import Codygen
 from ext.errors import UnknownEmoteError
 

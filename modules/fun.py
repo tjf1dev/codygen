@@ -8,17 +8,17 @@ from typing import cast
 from views import GuessLayout
 from discord.ext import commands
 from ext.colors import Color
-from ext.logger import logger
+import logger
 from discord import app_commands
-from models import Cog
+from models import Module, Codygen
 
 
-class fun(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class fun(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "fun commands!"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
-        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

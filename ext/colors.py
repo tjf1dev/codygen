@@ -1,11 +1,13 @@
 class Color:
     """
-    List of colors available in the codygen color pallete.
-    Sourced from my other Discord bot, xyz.bot
+    list of colors available in the codygen color pallete.
+    usage:
+        from ext.colors import Color
+        e = discord.Embed(color=Color.accent)
     """
 
     gray = 0xA5A2A8
-    grey = 0xA5A2A8  # hello fellow british devs
+    grey = 0xA5A2A8
     white = 0xFFFFFF
 
     purple = 0xD5ABFF
@@ -22,7 +24,7 @@ class Color:
     lred = 0xFF7F7F
     negative = 0xFF7F7F
     red = 0xFF264A
-    dark_red = 0x7D0F21  # steve lacy reference
+    dark_red = 0x7D0F21
     dred = 0x7D0F21
 
     light_blue = 0x82B8FF

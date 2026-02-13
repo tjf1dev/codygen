@@ -15,7 +15,7 @@ from io import BytesIO
 from typing import cast
 from ext.ui_base import Message
 from main import get_prefix
-from models import Cog
+from models import Module
 
 
 async def image_url_to_gif(url: str) -> str:
@@ -107,7 +107,7 @@ async def convert_to_gif(interaction: discord.Interaction, message: discord.Mess
             logger.warning(f"Failed to delete {file.fp.name}: {e}")
 
 
-class utility(Cog):
+class utility(Module):
     def __init__(self, bot):
         self.bot = bot
         self.description = "helpful tools you might need"

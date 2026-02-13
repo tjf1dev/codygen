@@ -6,7 +6,7 @@ from discord.ext import commands
 from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 from main import logger
-from ext.utils import xp_to_level, level_to_xp
+from ext.math import converter
 import aiosqlite
 from ext.ui_base import Message
 from views import (
@@ -17,10 +17,10 @@ from views import (
     LevelSetupLayout,
 )
 from ext.colors import Color
-from typing import Any
+from typing import Any, cast
 from models import Codygen
 import ext.errors
-from models import Cog
+from models import Module
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -188,15 +188,15 @@ async def reward_xp(
     if applicable grants roles for the user based on their xp
     """
     cur: aiosqlite.Cursor = await con.cursor()
-
     rewards_res = await cur.execute(
         "SELECT level, reward_id FROM level_rewards WHERE guild_id=?",
         (guild.id,),
     )
     rewards = await rewards_res.fetchall()
     list(rewards).sort(key=lambda x: x[0])
+    conv = converter(xp)
 
-    user_level = xp_to_level(xp)
+    user_level = conv.level
     roles_to_add = [
         role_id for level_required, role_id in rewards if user_level >= level_required
     ]
@@ -242,15 +242,15 @@ async def reward_xp(
             logger.error(f"failed to remove roles from {member}: {e}")
 
 
-class level(Cog):
-    def __init__(self, bot):
-        self.bot: Codygen = bot
+class level(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=False, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "track and reward users for activity"
         self.db: aiosqlite.Connection = bot.db
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             guilds=True, dms=False, private_channels=False
         )
-        self.hidden = False
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
@@ -301,9 +301,11 @@ class level(Cog):
             "UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
             (add, guild.id, user.id),
         )
+        conv = converter(xp)
         new_xp = xp + add
-        level = xp_to_level(xp)
-        new_level = xp_to_level(new_xp)
+        new_conv = converter(new_xp)
+        level = conv.level
+        new_level = new_conv.level
         if new_level > level:
             self.bot.dispatch("member_level_up", user, xp, new_xp, guild)
             logger.debug(
@@ -525,7 +527,8 @@ class level(Cog):
 
         xp = xp_row[0] if xp_row else 0
         multiplier = await get_boosts(cur, ctx.guild, user)
-        level = xp_to_level(xp)
+        conv = converter(xp)
+        level = conv.level
         rank_res = await cur.execute(
             "SELECT COUNT(*) FROM users WHERE guild_id=? AND xp > ?",
             (ctx.guild.id, xp),
@@ -606,7 +609,6 @@ class level(Cog):
 
         font = ImageFont.truetype("assets/ClashDisplay-Semibold.ttf", 72)
         font_light = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 66)
-
         valid_users = []
         count = 0
         for user_id, xp in users:
@@ -619,7 +621,7 @@ class level(Cog):
             user = ctx.guild.get_member(int(user_id))
             if user is None:
                 continue
-            level = xp_to_level(xp)
+            level = converter(xp).level
 
             avatar_asset = user.display_avatar.replace(size=128)
             buffer = io.BytesIO(await avatar_asset.read())
@@ -692,7 +694,7 @@ class level(Cog):
         if xp.isdigit():
             xpr = int(xp)
         elif xp.lower().endswith("l"):
-            xpr = level_to_xp(int(xp[:-1]))
+            xpr = converter(int(xp[:-1])).xp
         else:
             await ctx.reply(view=Message("## invalid level provided."))
             return
@@ -704,7 +706,7 @@ class level(Cog):
         await con.commit()
         await ctx.reply(
             view=Message(
-                f"## set {user.mention}'s xp to `{xpr}` (level `{xp_to_level(xpr)}`)."
+                f"## set {user.mention}'s xp to `{xpr}` (level `{converter(xpr).level}`)."
             ),
             ephemeral=True,
         )
@@ -731,10 +733,11 @@ class level(Cog):
         )
         current_row = await current_xp_res.fetchone()
         current_xp = current_row[0] if current_row else 0
-        if isinstance(xp, str) and xp.endswith("L"):
+        if isinstance(xp, str) and xp.lower().endswith("l"):
             levels_to_add = int(xp[:-1])
             xp_to_add = (
-                level_to_xp(level_to_xp(current_xp) + levels_to_add) - current_xp
+                converter(level=converter(current_xp).level + levels_to_add).xp
+                - current_xp
             )
         else:
             xp_to_add = int(xp)
@@ -749,7 +752,7 @@ class level(Cog):
 
         await ctx.reply(
             view=Message(
-                f"## added `{xp_to_add}` xp to {user.mention}. (level `{xp_to_level(new_xp)}`)"
+                f"## added `{xp_to_add}` xp to {user.mention}. (level `{converter(new_xp).level}`)"
             ),
             ephemeral=True,
         )
@@ -788,7 +791,7 @@ class level(Cog):
                 continue
 
             xp = user_xp_map.get(member.id, 0)
-            user_level = xp_to_level(xp)
+            user_level = converter(xp).level
 
             roles_to_add = [
                 role_id

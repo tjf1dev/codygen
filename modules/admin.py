@@ -11,16 +11,17 @@ import aiofiles
 from ext.ui_base import Message
 from models import Codygen
 from typing import cast
-from models import Cog
+from models import Module
 from pathlib import Path
 from ext.utils import timestamp
 from extensions.db_snapshot import snapshot_db
+from ext.pager import Paginator
 
 
-class admin(Cog):
-    def __init__(self, bot):
+class admin(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=True, default=False, **kwargs)
         self.bot = cast(Codygen, bot)
-        self.hidden = True
         self.description = "commands for bot administrators. for development purposes"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
 
@@ -96,12 +97,22 @@ class admin(Cog):
     )
     @commands.is_owner()
     async def admin_modules_list(self, ctx: commands.Context):
-        cogs = self.bot.cogs
-        out = ""
-        out += f"## {len(cogs)} loaded modules\n"
-        for name, cog in cogs.items():
-            out += f"**{name}** {cog.description or 'no description provided.'}\n"
-        await ctx.reply(view=Message(out))
+        cogs = list(self.bot.cogs.items())
+        pages: list[Message] = []
+
+        for i in range(0, len(cogs), 8):
+            chunk = cogs[i : i + 8]
+            out = f"## loaded modules ({i + 1}-{i + len(chunk)} / {len(cogs)})\n"
+
+            for name, cog in chunk:
+                out += (
+                    f"**{name}**\n> {cog.description or 'no description provided.'}\n"
+                )
+
+            pages.append(Message(out))
+
+        paginator = Paginator.from_ctx(pages, ctx)
+        await ctx.reply(view=paginator.to_layout())
 
     @admin.command(name="reload", aliases=["r"])
     @commands.is_owner()
@@ -157,7 +168,7 @@ class admin(Cog):
     async def update(self, ctx: commands.Context):
         self.bot: Codygen
         file = await aiofiles.open("VERSION")
-        before = self.bot.version  # noqa: F841
+        before = self.bot.version
         self.bot.version = await file.read()
         activity = discord.Activity(
             type=discord.ActivityType.watching, name=f"v{self.bot.version}"

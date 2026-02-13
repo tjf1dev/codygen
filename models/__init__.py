@@ -1,6 +1,6 @@
 from .codygen import Codygen
 from .event import Event
 from .emote import Emote
-from .cog import Cog
+from .module import Module
 
-__all__ = ["Codygen", "Event", "Emote", "Cog"]
+__all__ = ["Codygen", "Event", "Emote", "Module"]

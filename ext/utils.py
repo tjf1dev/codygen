@@ -1,13 +1,14 @@
 import base64
 import datetime
-import aiohttp
 import aiosqlite
 import asyncio
-from ext.logger import logger
+import logger
 import os
 import sys
 import discord
+import time
 from typing import Tuple, Optional, Any, List, AsyncGenerator
+from ext.config import DEFAULT_MODULE_OVERRIDE, DEFAULT_MODULE_STATE
 from models import Codygen
 from ext.ui_base import Message
 from ext.colors import Color
@@ -37,160 +38,10 @@ def lfm_generate_full_state(user_id: int) -> str:
     return f"{id_enc}@{hash}"
 
 
-# TODO add custom value support
-# TODO allow detailed command descriptions, with examples, previews, etc.
-# TODO make the output the same for each command, and less messy
-def parse_commands(commands, bot=None) -> list[dict]:
-    """
-    Formats commands into a nice list
-    Disregards groups, context menus
-    Optionally adds cog information if bot is provided
-    """
-
-    def get_full_command_name(cmd):
-        return (
-            f"{cmd.full_parent_name} {cmd.name}" if cmd.full_parent_name else cmd.name
-        )
-
-    valid_cmds = []
-
-    dpy_command_lookup = {}
-    if bot:
-        for cog_name, cog in bot.cogs.items():
-            if cog_name.lower() in ["jishaku"]:
-                continue
-
-            cog_commands = list(cog.walk_commands())
-            for cmd in cog_commands:
-                full_name = get_full_command_name(cmd)
-                dpy_command_lookup[full_name] = {
-                    "cog_name": cog_name,
-                    "cog_description": getattr(cog, "description", "") or "",
-                    "description": cmd.description or "",
-                }
-
-    # command_type = my custom type for commands
-    # parent
-    # 0 - regular parent (not group) command
-    # 3 - context menu (those get ignored in this case)
-    # 6 - unknown
-    # not parent
-    # 1 - subcommand from a group
-    # 2 - sub-subcommand
-    # 5 - group with a parent
-    for cmd in commands:
-        command_type = (
-            0  # here we set to regular command, because we cant tell what it is yet
-        )
-        if cmd["type"] == 3:  # context menu
-            command_type = 3
-        elif cmd["type"] != 1:
-            command_type = 6
-
-        options = cmd.get("options", None)
-        # if it doesnt have any options and the type is 1, its 100% sure its regular command (type 0)
-        # if it does...
-        if options:
-            for option in options:
-                if option["type"] == 1:
-                    subcommand_data = {
-                        "name": option["name"],
-                        "full_name": f"{cmd['name']} {option['name']}",
-                        "parent": {"name": cmd["name"]},
-                        "command": option,
-                        "id": cmd["id"],
-                        "is_subcommand": 1,
-                    }
-                    # Add cog info if available
-                    if bot and subcommand_data["full_name"] in dpy_command_lookup:
-                        subcommand_data.update(
-                            dpy_command_lookup[subcommand_data["full_name"]]
-                        )
-                    valid_cmds.append(subcommand_data)
-
-                if option["type"] == 2:  # group with a parent
-                    for sub_option in option.get("options", {}):  # looking for type 2's
-                        if sub_option["type"] == 1:  # sub-subcommand
-                            sub_option_parent = option["name"]
-                            option_parent = cmd["name"]
-                            sub_sub_data = {
-                                "name": sub_option["name"],
-                                "full_name": f"{option_parent} {sub_option_parent} {sub_option['name']}",
-                                "parent": {
-                                    "name": sub_option_parent,
-                                    "parent": {"name": option_parent},
-                                },
-                                "command": sub_option,
-                                "id": cmd["id"],
-                                "is_subcommand": 2,
-                            }
-                            # Add cog info if available
-                            if bot and sub_sub_data["full_name"] in dpy_command_lookup:
-                                sub_sub_data.update(
-                                    dpy_command_lookup[sub_sub_data["full_name"]]
-                                )
-                            valid_cmds.append(sub_sub_data)
-        else:
-            if command_type == 0:
-                cmd["command"] = cmd.copy()
-                cmd["command"].pop("command", None)  # compatibility
-                cmd["full_name"] = cmd["name"]  # also compatibility
-                cmd["is_subcommand"] = 0
-                # Add cog info if available
-                if bot and cmd["full_name"] in dpy_command_lookup:
-                    cmd.update(dpy_command_lookup[cmd["full_name"]])
-                valid_cmds.append(cmd)
-
-    return valid_cmds
-
-
-async def get_xp(user: discord.Member, bot: Codygen):
-    query = await (
-        await bot.db.execute(
-            "SELECT xp FROM users WHERE guild_id=? AND user_id=?",
-            (user.id, user.guild.id),
-        )
-    ).fetchone()
-    if query:
-        return query[0]
-
-
-async def get_command(
-    token: str, client_id: str | int, id: int = 0, name: str = ""
-) -> dict | list[dict]:
-    """
-    gets information about a command by name or id
-    one of those is required
-    set name to * for all commands
-    dedicated to discord.py since you cannot include command ids in your classes
-    if pycord can do it why cant you
-    """
-    url = f"https://discord.com/api/v10/applications/{client_id}/commands"
-    headers = {"Authorization": f"Bot {token}"}
-    try:
-        if not name and not id:
-            logger.error("either name or id is required")
-            return {}
-        async with aiohttp.ClientSession(headers=headers) as session:
-            async with session.get(url) as resp:
-                data: list = await resp.json()
-        if name == "*":
-            logger.debug("command list downloaded")
-            return data
-
-        for command in data:
-            if id in command["id"]:
-                return command
-            if name in command["name"]:
-                return command
-        return {}
-    except Exception:
-        return {}
-
-
 def iso_to_unix(iso_str: str) -> int:
     """
-    Convert an ISO 8601 UTC timestamp string to a Unix timestamp.
+    convert an ISO 8601 UTC timestamp string to a Unix timestamp.
+    used for deprecated database types. (we use unix timestamps now)
 
     Args:
         iso_str (str): ISO timestamp, e.g. '2025-06-28T16:50:11Z'
@@ -214,112 +65,6 @@ def timestamp(unix: str | int | float, mode: str = "R", inf_text: str = "never")
     return f"<t:{int(unix)}:{mode}>"
 
 
-def _old_xp_to_level(xp):
-    level = 1
-    xp_needed = 100
-    increment = 50
-
-    while xp >= xp_needed:
-        xp -= xp_needed
-        level += 1
-        xp_needed += increment
-
-    return level
-
-
-def adjusted_xp_cost(level: int, base_xp: float = 50, exponent: float = 1.24) -> float:
-    return base_xp * (level**exponent)
-
-
-def level_to_xp(level: int, base_xp: float = 50, exponent: float = 1.24) -> int:
-    total_xp = 0
-    for lvl in range(1, level + 1):
-        total_xp += adjusted_xp_cost(lvl, base_xp, exponent)
-    return round(total_xp)
-
-
-def xp_to_level(xp: int | float, base_xp: float = 50, exponent: float = 1.24) -> int:
-    level = 1
-    while True:
-        cost = adjusted_xp_cost(level, base_xp, exponent)
-        if xp < cost:
-            break
-        xp -= cost
-        level += 1
-    return level
-
-
-def map_custom_commands_to_cogs(bot):
-    """
-    Maps custom commands to their corresponding discord.py commands and cogs.
-    Returns only JSON-serializable data.
-
-    Args:
-        bot: The discord.py Bot instance
-
-    Returns:
-        list: A list of dictionaries with custom command data plus cog info (JSON-serializable)
-        Structure: [
-            {
-                # All original custom command data (id, full_name, etc.)
-                'id': '...',
-                'full_name': '...',
-                'description': '...',
-                # Plus cog data (serializable only)
-                'cog_name': str,
-                'cog_description': str,
-                'dpy_description': str,  # Description from discord.py command
-                'dpy_help': str,         # Help text from discord.py command
-                'dpy_usage': str,        # Usage from discord.py command
-                'dpy_brief': str         # Brief description from discord.py command
-            }
-        ]
-    """
-
-    def get_full_command_name(cmd):
-        return (
-            f"{cmd.full_parent_name} {cmd.name}" if cmd.full_parent_name else cmd.name
-        )
-
-    # Get all custom commands
-    all_custom_commands = parse_commands(bot.full_commands)
-
-    # Create lookup dictionary for all discord.py commands
-    dpy_command_lookup = {}
-    cog_lookup = {}
-
-    # Build lookup tables from all cogs
-    for cog_name, cog in bot.cogs.items():
-        if cog_name.lower() in ["jishaku"]:
-            continue
-
-        cog_commands = list(cog.walk_commands())
-        for cmd in cog_commands:
-            full_name = get_full_command_name(cmd)
-            dpy_command_lookup[full_name] = cmd
-            cog_lookup[full_name] = (cog, cog_name)
-
-    # Map custom commands to discord.py commands and cogs (JSON-serializable only)
-    mapped_commands = []
-
-    for custom_cmd in all_custom_commands:
-        cmd_full_name = custom_cmd["full_name"]
-
-        # Find matching discord.py command and cog
-        dpy_cmd = dpy_command_lookup.get(cmd_full_name)
-        cog_info = cog_lookup.get(cmd_full_name)
-
-        if dpy_cmd and cog_info:
-            cog, cog_name = cog_info
-            # Create new dict with all custom data plus serializable cog info
-            mapped_cmd = {
-                **custom_cmd,  # Spread all custom command data
-                "cog_name": cog_name,
-                "cog_description": getattr(cog, "description", "") or "",
-            }
-            mapped_commands.append(mapped_cmd)
-
-    return mapped_commands
 
 
 def parse_flags(s: str) -> dict[str, str | bool]:
@@ -488,8 +233,12 @@ async def setup_guild(
     await asyncio.sleep(2)
     logger.debug("attempting to insert database values")
     db: aiosqlite.Connection = bot.db
+    error = None
+    ts = round(time.time())
     try:
-        await db.execute("INSERT INTO guilds (guild_id) VALUES (?)", (guild.id,))
+        await db.execute(
+            "INSERT INTO guilds (guild_id, timestamp) VALUES (?, ?)", (guild.id, ts)
+        )
         logger.debug("made default guild data")
         config_already_made = False
     except Exception as e:
@@ -497,13 +246,37 @@ async def setup_guild(
             f"failed when inserting guild data for {guild.id}; {type(e).__name__}: {e}"
         )
         config_already_made = True
+        error = e
     try:
-        await db.execute("INSERT INTO modules (guild_id) VALUES (?)", (guild.id,))
+        cog_names = bot.get_modules().keys()
+
+        columns = ["guild_id", *cog_names]
+        placeholders = ", ".join("?" for _ in columns)
+
+        values = [
+            guild.id,
+            *(DEFAULT_MODULE_OVERRIDE.get(c, DEFAULT_MODULE_STATE) for c in cog_names),
+        ]
+        for c in cog_names:
+            columns.append(c)
+            values.append(DEFAULT_MODULE_OVERRIDE.get(c, DEFAULT_MODULE_STATE))
+        logger.debug(f"{cog_names} {bot.cogs} {columns} {placeholders}")
+        await db.execute(
+            f"INSERT INTO modules ({', '.join(columns)}) VALUES ({placeholders})",
+            values,
+        )
         logger.debug("made default module data")
     except Exception as e:
+        if isinstance(e, aiosqlite.OperationalError):
+            if str(e).startswith("table modules has no column named"):
+                logger.error(
+                    f"database is outdated. please use ./codygen db add_column or ./codygen db recreate to add the '{str(e).split()[len(str(e).split()) - 1]}' column."
+                )
+
         logger.warning(
             f"failed when inserting module data for {guild.id}; {type(e).__name__}: {e}"
         )
+        error = e
         pass
     await db.commit()
     bot_member = guild.me
@@ -548,5 +321,11 @@ async def setup_guild(
         "\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run /settings modules in the server to configure modules, or use the dashboard.",
         accent_color=Color.positive,
     )
+    if error:
+        e = error
+        stage2 = Message(
+            message=f"# initialization failed: internal error\ntry again or file a bug report.\n-# `{type(e).__name__}: {e}`",
+            accent_color=Color.negative,
+        )
     yield stage2
     logger.debug(f"...finished setting up {guild.id}")

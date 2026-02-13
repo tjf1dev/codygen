@@ -3,12 +3,14 @@ import json
 import typer
 import pathlib
 import asyncio
+import db as database
 from rich.console import Console
 from rich.panel import Panel
 from ext.config import DEFAULT_CONFIG
 from typing import Annotated
 from main import main as start_codygen
-from extensions.api import main as start_api
+from ext.math import level_to_xp, LevelConverterV3
+# from extensions.api import main as start_api
 # original cli tool from https://github.com/tjf1dev/protochat
 
 
@@ -63,7 +65,65 @@ def run():
 
 @app.command()
 def api():
-    asyncio.run(start_api())
+    from extensions.api import main as run_api
+
+    run_api()
+
+
+db = typer.Typer()
+
+
+@db.command()
+def create():
+    asyncio.run(database.create_table())
+
+
+@db.command()
+def add_column():
+    asyncio.run(database.add_column())
+
+
+@db.command()
+def recreate():
+    asyncio.run(database.backup_and_recreate())
+
+
+@db.command()
+def convert():
+    asyncio.run(database.convert_from_json())
+
+
+@app.command(name="level_to_xp_v4")
+def level_to_xp_v4(level: int):
+    print(level_to_xp(level))
+
+
+@app.command(name="xp_to_level_v4")
+def xp_to_level_v4(xp: int):
+    print(level_to_xp(xp))
+
+
+@app.command(name="level_to_xp")
+def level_to_xp_cmd(level: int):
+    converter = LevelConverterV3(level=level)
+    xp = converter.xp
+    print(xp)
+
+
+@app.command(name="xp_to_level")
+def xp_to_level_v5(xp: int):
+    print(LevelConverterV3(xp).level)
+
+
+@app.command(name="xp_to_level_chart")
+def xp_to_level_chart_v5():
+    LevelConverterV3().chart()
+
+
+app.add_typer(db, name="db")
+# @app.command()
+# def api():
+#     asyncio.run(start_api())
 
 
 if __name__ == "__main__":

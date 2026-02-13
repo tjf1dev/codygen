@@ -3,6 +3,10 @@ this is the config made when first starting codygen
 """
 
 DEFAULT_MODULE_STATE = True
+DEFAULT_MODULE_OVERRIDE = {
+    "level": False,
+    "logging": False,
+}
 DEFAULT_CONFIG = {
     "default_prefix": ">",
     "db_snapshot_interval_days": 7,

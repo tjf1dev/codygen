@@ -3,8 +3,9 @@ from discord.ext import commands
 from ext.colors import Color
 from typing import cast, Any, Dict, Union
 import datetime
-from ext.utils import timestamp, describe_message, permissions_to_list, xp_to_level
-from ext.logger import logger
+from ext.utils import timestamp, describe_message, permissions_to_list
+from ext.math import LevelConverterV3
+import logger
 import time
 from ext.ui_base import Message
 from models import Codygen
@@ -15,7 +16,7 @@ from views.logging_setup import LoggingSetupStart
 from models import Event
 import json
 from collections import defaultdict
-from models import Cog
+from models import Module
 
 _event_registry: Dict[str, Event] = {}
 _event_category_map = {
@@ -53,11 +54,11 @@ def group_events_by_category(events: dict[str, Event]) -> dict[str, list[dict]]:
 
 
 # TODO add codygen's custom logs (levelup, ticket create, command triggered, prefix change, etc)
-class logging(Cog):
-    def __init__(self, bot):
+class logging(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=False, **kwargs)
         self.bot = cast(Codygen, bot)
         self.session = aiohttp.ClientSession()
-        self.hidden = False
         self.description = "log various important actions in your server"
 
     def list_events(self) -> Dict[str, Event]:
@@ -1208,8 +1209,8 @@ class logging(Cog):
         self, member: discord.Member, before: int, after: int, guild: discord.Guild
     ):
         """also check out: user-facing levelup messages"""
-        before_level = xp_to_level(before)
-        level = xp_to_level(after)
+        before_level = LevelConverterV3(xp=before).level
+        level = LevelConverterV3(xp=after).level
         await self.send_log(
             title="Member level up",
             description=f"> Member: {member.mention} (`{member.name}` `{member.id}`)\n> XP: {after}xp\n> Old level: {before_level}\n> New level: {level}",

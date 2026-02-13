@@ -1,6 +1,6 @@
 from typing import Any
 from discord.ext import commands
-from ext.logger import logger
+import logger
 from ext.ui_base import Message
 from ext.utils import get_xp, xp_to_level
 from discord import app_commands
@@ -8,18 +8,18 @@ from ext import errors
 from ext.colors import Color
 import aiosqlite
 import discord
-from models import Cog
+from models import Module
 # this cog is focused on my server rather than the public
 
 
-class events(Cog):
+class events(Module):
     def __init__(self, bot):
         self.bot = bot
         self.description = "premade events for engagement!!"
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             True, False, False
         )
-        self.hidden = False
+        self.hidden = True
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
