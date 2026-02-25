@@ -2,6 +2,7 @@ import discord
 import os
 import io
 import time
+import random
 from discord.ext import commands
 from discord import app_commands
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -21,6 +22,7 @@ from typing import Any, cast
 from models import Codygen
 import ext.errors
 from models import Module
+from ext.utils import timestamp
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -118,16 +120,6 @@ def split_embed_description(lines, max_length=4096) -> list:
 
 def boost_value(value, percentage) -> int:
     return value * (1 + percentage / 100)
-
-
-def timestamp(unix: int | str, type: str = "R", infinite_msg: str = "never") -> str:
-    """
-    Generates a Discord timestamp out of a Unix timestamp.
-    -1 for infinite
-    """
-    if unix == -1:
-        return infinite_msg
-    return f"<t:{unix}" + f":{type}>" if type else ">"
 
 
 async def send_levelup(
@@ -529,20 +521,42 @@ class level(Module):
         multiplier = await get_boosts(cur, ctx.guild, user)
         conv = converter(xp)
         level = conv.level
-        rank_res = await cur.execute(
-            "SELECT COUNT(*) FROM users WHERE guild_id=? AND xp > ?",
-            (ctx.guild.id, xp),
+        leaderboard = await self.get_leaderboard(ctx.guild)
+        placement = next(
+            (
+                i
+                for i, (member, _) in enumerate(leaderboard, start=1)
+                if member.id == ctx.author.id
+            ),
+            None,
         )
-        rank_row = await rank_res.fetchone()
-        place_in_leaderboard = rank_row[0] if rank_row else 1
 
         # image
-        img = Image.new("RGB", (256, 256), color=(0, 0, 0))
+        tw, th = 256, 256
+        zoom = 1
+        bg = Image.open("assets/images/background.png")
+        bw, bh = bg.size
+
+        crop_w = int(tw / zoom)
+        crop_h = int(th / zoom)
+
+        max_x = bw - crop_w
+        max_y = bh - crop_h
+
+        x = random.randint(0, max_x)
+        y = random.randint(0, max_y)
+
+        bg = bg.crop((x, y, x + crop_w, y + crop_h))
+        bg = bg.resize((tw, th), Image.Resampling.LANCZOS)
+
+        img = bg
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 200))
+        img = Image.alpha_composite(img, overlay)
         d = ImageDraw.Draw(img)
 
         font_bold = ImageFont.truetype("assets/ClashDisplay-Bold.ttf", 96)
-        font = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 24)
-        font_light = ImageFont.truetype("assets/ClashDisplay-Medium.ttf", 22)
+        font = ImageFont.truetype("assets/work_sans/WorkSans-Regular.ttf", 24)
+        font_light = ImageFont.truetype("assets/work_sans/WorkSans-Light.ttf", 22)
 
         avatar_asset = user.display_avatar.replace(size=32)
         buffer = io.BytesIO(await avatar_asset.read())
@@ -567,7 +581,7 @@ class level(Module):
         )
         d.text(
             (128, 210),
-            f"{xp}xp • #{place_in_leaderboard}",
+            f"{xp}xp • #{placement}" if placement is not None else f"#{xp}",
             font=font_light,
             fill=(255, 255, 255),
             anchor="mm",
@@ -581,44 +595,84 @@ class level(Module):
         )
         try:
             await ctx.reply(
-                content=(
-                    f"-# xp boost: **{multiplier['multiplier']}%**!"
-                    if multiplier["multiplier"]
-                    else None
-                ),
+                content=f"-# xp boost: **{multiplier['multiplier']}%**!"
+                if multiplier["multiplier"]
+                else None,
                 file=discord.File(img_path),
             )
         finally:
             if os.path.exists(img_path):
                 os.remove(img_path)
 
-    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
-    @level.command(name="top", description="view the most active members of the server")
-    async def leveltop(self, ctx: commands.Context):
-        con: aiosqlite.Connection = ctx.bot.db
+    async def get_leaderboard(self, guild: discord.Guild):
+        con: aiosqlite.Connection = self.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
+        raw_users = await (
+            await cur.execute(
+                "SELECT user_id, xp FROM users WHERE guild_id=? ORDER BY xp DESC",
+                (guild.id,),
+            )
+        ).fetchall()
+        users = []
+        for user in raw_users:
+            member = guild.get_member(user["user_id"])
+            if member and not member.bot:
+                users.append((member, user["xp"]))
+        return users
+
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.choices(
+        type=[
+            app_commands.Choice(name="Image", value="image"),
+            app_commands.Choice(name="Text", value="text"),
+        ]
+    )
+    @level.command(name="top", description="view the most active members of the server")
+    async def leveltop(self, ctx: commands.Context, type: str = "image"):
         if not ctx.guild:
             return
-        users_res = await cur.execute(
-            "SELECT user_id, xp FROM users WHERE guild_id=? ORDER BY xp DESC",
-            (ctx.guild.id,),
-        )
-        users = await users_res.fetchall()
-        img = Image.new("RGB", (1350, 1536), color=(0, 0, 0))
+        leaderboard = await self.get_leaderboard(ctx.guild)
+
+        if type == "text":
+            msg = discord.ui.LayoutView().add_item(
+                discord.ui.Container()
+                .add_item(discord.ui.TextDisplay("# Leaderboard"))
+                .add_item(discord.ui.Separator())
+                .add_item(
+                    discord.ui.TextDisplay(
+                        f"{'\n'.join([f'### {i + 1}. **{user.display_name}**\n> level **{converter(xp).level}** (`{xp}` xp)' for i, (user, xp) in enumerate(leaderboard)])}"  # type: ignore
+                    )
+                )
+            )
+            await ctx.reply(view=msg)
+            return
+        tw, th = 1350, 1536
+        zoom = 2.0
+
+        bg = Image.open("assets/images/background.png")
+        bw, bh = bg.size
+
+        crop_w = int(tw / zoom)
+        crop_h = int(th / zoom)
+
+        max_x = bw - crop_w
+        max_y = bh - crop_h
+
+        x = random.randint(0, max_x)
+        y = random.randint(0, max_y)
+
+        bg = bg.crop((x, y, x + crop_w, y + crop_h))
+        bg = bg.resize((tw, th), Image.Resampling.LANCZOS)
+
+        img = bg
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 200))
+        img = Image.alpha_composite(img, overlay)
         d = ImageDraw.Draw(img)
 
-        font = ImageFont.truetype("assets/ClashDisplay-Semibold.ttf", 72)
-        font_light = ImageFont.truetype("assets/ClashDisplay-Regular.ttf", 66)
-        valid_users = []
-        count = 0
-        for user_id, xp in users:
-            user = ctx.guild.get_member(int(user_id))
-            if user is not None and count < 10:
-                valid_users.append((user_id, xp))
-                count += 1
+        font = ImageFont.truetype("assets/work_sans/WorkSans-Bold.ttf", 72)
+        font_light = ImageFont.truetype("assets/space_mono/SpaceMono-Regular.ttf", 66)
 
-        for i, (user_id, xp) in enumerate(valid_users[:10], start=1):
-            user = ctx.guild.get_member(int(user_id))
+        for i, (user, xp) in enumerate(leaderboard[:10], start=1):
             if user is None:
                 continue
             level = converter(xp).level
@@ -633,13 +687,13 @@ class level(Module):
             avatar.putalpha(mask)
             y_pos = 16 * 3 + (i - 1) * 48 * 3
             img.paste(avatar, (16 * 3, y_pos), avatar)
-            bbox = d.textbbox((0, 0), f"{level} • {xp}xp", font=font_light)
+            bbox = d.textbbox((0, 0), f"{level}•{xp}xp", font=font_light)
             text_height = bbox[3] - bbox[1]
             text_y = y_pos + 128 // 2 - text_height // 2
 
             d.text(
                 (1350 - 16 * 3, text_y),
-                f"{level} • {xp}xp",
+                f"{level}•{xp}xp",
                 font=font_light,
                 fill=(255, 255, 255),
                 anchor="rt",
@@ -648,24 +702,25 @@ class level(Module):
             text_height_name = bbox_name[3] - bbox_name[1]
             text_y_name = y_pos + 128 // 2 - text_height_name // 2
 
-            if len(user.name) < 13:
-                d.text(
-                    (56 * 3 + 20, text_y_name),
-                    str(i) + ". " + user.name,
-                    font=font,
-                    fill=(255, 255, 255),
-                    anchor="lt",
-                )
-            else:
-                d.text(
-                    (56 * 3 + 20, text_y_name),
-                    str(i) + ". " + user.name[:12] + "...",
-                    font=font,
-                    fill=(255, 255, 255),
-                    anchor="lt",
-                )
+            num = f"{i}. "
+            name = (
+                user.display_name
+                if len(user.display_name) < 16
+                else user.display_name[:16] + "..."
+            )
 
-        img_path = f"data/guilds/{ctx.guild.id}_level_top.png"
+            x = 56 * 3 + 20
+            y = text_y_name
+
+            d.text((x, y), num, font=font_light, fill=(255, 255, 255), anchor="lt")
+
+            num_width = d.textlength(num, font=font_light) - 25
+
+            d.text(
+                (x + num_width, y), name, font=font, fill=(255, 255, 255), anchor="lt"
+            )
+
+        img_path = f"cache/{ctx.guild.id}_level_top.png"
         img.save(img_path)
 
         try:
@@ -850,7 +905,6 @@ class level(Module):
     async def rewards(self, ctx: commands.Context):
         pass
 
-    # todo interactive guide DONE
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_guild_permissions(administrator=True)
@@ -886,6 +940,32 @@ class level(Module):
             view=Message(
                 f"## success\nlevel {level} now rewards role {role.mention}",
                 accent_color=Color.positive,
+            ),
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
+    @app_commands.checks.has_permissions(administrator=True)
+    @commands.has_guild_permissions(administrator=True)
+    @rewards.command(name="get", description="gets the server's reward roles")
+    async def rewards_get(self, ctx: commands.Context):
+        if not ctx.guild:
+            return
+        db = self.bot.db
+        rewards = await (
+            await db.execute(
+                "SELECT level, reward_id FROM level_rewards WHERE guild_id=?",
+                (ctx.guild.id,),
+            )
+        ).fetchall()
+        await ctx.reply(
+            view=Message(
+                f"# level rewards in {ctx.guild.name}\n"
+                + "\n".join(
+                    [f"- Level **{level}** - <@&{role}>" for level, role in rewards]
+                )
+                or "-- none ---",
+                accent_color=Color.accent,
             ),
             allowed_mentions=discord.AllowedMentions.none(),
         )

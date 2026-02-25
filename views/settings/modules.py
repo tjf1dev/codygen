@@ -54,7 +54,7 @@ class ModulesSuccess(LayoutView):
         super().__init__()
         cont = Container(accent_color=Color.positive)
         cont.add_item(
-            TextDisplay(f"## changes applied successfully.\n```{change_text}```")
+            TextDisplay(f"## changes applied successfully.\n```diff\n{change_text}```")
         )
         self.add_item(cont)
 
@@ -97,7 +97,7 @@ class ModulesConfirm(LayoutView):
 
         cont.add_item(
             TextDisplay(
-                f"## are you sure?\nthis will change the following modules:\n```{change_text}```\nafter applying, the changes will take effect immediatly, making affected modules (in)accessible"
+                f"## are you sure?\nthis will change the following modules:\n```diff\n{change_text}```\nafter applying, the changes will take effect immediatly, making affected modules (in)accessible"
             )
         )
         cont.add_item(row)

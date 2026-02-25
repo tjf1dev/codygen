@@ -65,6 +65,12 @@ def timestamp(unix: str | int | float, mode: str = "R", inf_text: str = "never")
     return f"<t:{int(unix)}:{mode}>"
 
 
+def percentage_from_string(string):
+    hash_object = hashlib.sha256(string.encode())
+    hex_digest = hash_object.hexdigest()
+    int_value = int(hex_digest, 16)
+    number = (int_value % 100) + 1
+    return number
 
 
 def parse_flags(s: str) -> dict[str, str | bool]:
