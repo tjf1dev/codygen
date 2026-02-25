@@ -3,11 +3,12 @@
 > [!TIP]
 > Learn more about the bot in our [documentation](https://github.com/tjf1dev/codygen/wiki)
 
-> [!TIP] > [Invite codygen to your server](https://discord.com/oauth2/authorize?client_id=1337509693874245682&permissions=8&integration_type=0&scope=bot)
+> [!TIP]
+> [Invite codygen to your server](https://discord.com/oauth2/authorize?client_id=1337509693874245682&permissions=8&integration_type=0&scope=bot)
 
 ## about the app
 
-> codygen is a small multipurpose Discord bot made by [tjf1dev](https://github.com/tjf1dev)
+> codygen is a small multipurpose Discord bot made by [tjf1](https://github.com/tjf1dev)
 > made in discord.py <3
 
 ## support

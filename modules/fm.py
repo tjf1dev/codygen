@@ -12,7 +12,7 @@ import aiofiles
 from ext.ui_base import Message
 import ext.errors
 from typing import cast
-from models import Cog
+from models import Module, Codygen
 from views import fmLayout, lastfmMessageWithLogin
 
 
@@ -28,14 +28,14 @@ async def get_average_color(url):
             return (r, g, b)
 
 
-class fm(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class fm(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = (
-            "use your Last.fm integration to check what you're listening to."
+            "use your last.fm integration to check what you're listening to."
         )
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
-        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")

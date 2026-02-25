@@ -4,7 +4,7 @@ import datetime
 import psutil
 import os
 import sys
-from ext.utils import parse_commands
+from ext.commands import parse_commands
 from models import Codygen
 from discord.ui import LayoutView, TextDisplay, Container, Separator, Section
 

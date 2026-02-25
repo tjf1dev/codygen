@@ -7,6 +7,7 @@ from .level.level_up import LevelupLayout
 from .level.level_boosts import LevelBoostsLayout
 from .level.level_refresh import LevelRefreshSummaryLayout
 from .level.level_setup import LevelSetupLayout, LevelSetupModal
+from .level.level_get import LevelGetLayout
 
 from .about import AboutLayout
 from .changelog import ChangelogLayout
@@ -30,6 +31,7 @@ __all__ = [
     "ServerInfoLayout",
     "UserInfoLayout",
     "LevelupLayout",
+    "LevelGetLayout",
     "LevelBoostsLayout",
     "LevelRefreshSummaryLayout",
     "AboutLayout",

@@ -1,17 +1,28 @@
-requests
+# discord
 git+https://github.com/Rapptz/discord.py
-python-dotenv 
-quart
-aiofiles
-psutil
-asyncio
-colorama
 jishaku
-pillow
-python-dateutil
-aiosqlite
 discord-ext-ipcx
-quartcord
-quart_cors
+
+# async
+asyncio
+aiofiles
+
+# terminal
 typer
 rich
+colorama
+
+# networking
+fastapi
+fastapi-discord
+quartcord
+quart_cors
+quart
+requests
+
+# other
+python-dotenv 
+aiosqlite
+pillow
+psutil
+python-dateutil

@@ -1,5 +1,5 @@
 class CodygenError(Exception):
-    def __init__(self, message: str):
+    def __init__(self, message: str | None = None):
         super().__init__(message)
         self.message = message
 
@@ -19,6 +19,10 @@ class MisconfigurationError(CodygenError):
 
 
 class MissingEnvironmentVariable(CodygenError):
+    pass
+
+
+class FormDecodeError(CodygenError):
     pass
 
 

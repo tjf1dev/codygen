@@ -15,21 +15,21 @@ import asyncio
 import base64
 import aiohttp
 import logging
-import shutil
 import ext.errors
 import datetime
 import aiosqlite
+import logger
 from discord.ext import commands, tasks
 from discord import app_commands
 from typing import Optional, Dict, Any
 from colorama import Fore
 from ext.colors import Color
-from ext.logger import logger
 from db import connect, create_table
-from ext.utils import get_command, parse_flags, get_required_env, ensure_env
-from discord.ext import ipcx
+from ext.utils import parse_flags, get_required_env, ensure_env
+from ext.commands import get_commands, parse_commands
+from discord.ext import ipcx  # type: ignore
 from ext.ui_base import Message
-from ext.config import DEFAULT_CONFIG, DEFAULT_MODULE_STATE
+from ext.config import DEFAULT_CONFIG, DEFAULT_MODULE_STATE, DEFAULT_MODULE_OVERRIDE
 from models import Codygen
 from typing import cast
 from ext.errors import CodygenError
@@ -42,7 +42,6 @@ from ext.emotes import (
 from extensions.cache_commands import cache_commands
 from extensions.db_snapshot import snapshot_db
 from pathlib import Path
-# from ext.web import app
 
 
 def get_global_config() -> dict:
@@ -167,7 +166,7 @@ async def cleanup_cache():
 
 
 async def custom_api_request(
-    bot: commands.Bot,
+    bot: commands.Bot | Codygen,
     endpoint: str,
     method: str = "get",
     auth: bool = True,
@@ -220,7 +219,7 @@ async def database() -> aiosqlite.Connection:
     Opens a connection to the database, and saves it onto the client
     Checks if the database is present, and if it isnt, creates the database with tables.
     """
-    shutil.copyfile("codygen.db", "codygen.db.backup")
+    # shutil.copyfile("codygen.db", "codygen.db.backup")
     logger.info("loading database")
     con = await connect()
     await con.execute("PRAGMA journal_mode=WAL;")
@@ -276,23 +275,32 @@ client = Codygen(
     ),
     allowed_installs=app_commands.AppInstallationType(guild=True, user=True),
 )
+
+
+def get_modules():
+    logger.debug("getting the bot's cogs.")
+    logger.debug(client.cogs)
+    return client.cogs
+
+
 tree = client.tree
 dotenv.load_dotenv()
 
 client.ipc = ipcx.Server(
     cast(commands.Bot, client),
     secret_key=os.getenv("IPC_KEY"),
-    port=20001,
+    port=20000,
     multicast_port=20002,
 )
 client.log = logging.getLogger("discord.ext.ipcx")
+client.get_modules = get_modules
 
 
 async def refresh_commands() -> list[dict]:
     if not client.user:
         raise CodygenError("user doesnt exist")
     uid = cast(int, client.user.id)
-    client.full_commands = await get_command(TOKEN, uid, name="*")
+    client.full_commands = cast(list[dict[str, Any]], await get_commands(TOKEN, uid))
     if not isinstance(client.full_commands, list):
         raise CodygenError("commands didn't load")
     return client.full_commands
@@ -401,13 +409,17 @@ async def on_command(ctx: commands.Context):
 async def update_guild_modules(
     con: aiosqlite.Connection,
     guild_id,
-    bot: Codygen | commands.Bot,
+    bot: Codygen,
     current_settings: dict,
 ) -> dict:
     modules = bot.cogs
     for module in modules.keys():
+        if bot.module(module).hidden:
+            continue
         if module not in current_settings.keys():
             current_settings[module] = DEFAULT_MODULE_STATE
+            if DEFAULT_MODULE_OVERRIDE.get(module):
+                current_settings[module] = DEFAULT_MODULE_OVERRIDE[module]
     settings_str = json.dumps(current_settings, indent=4)
     await con.execute(
         "UPDATE guilds SET module_settings=? WHERE guild_id=?",
@@ -421,6 +433,7 @@ async def update_guild_modules(
 
 
 # TODO CUSTOM PERMISSION CHECK (so it can be customized with roles users etc not just permissions)
+# what the fuck did i mean by that
 @client.check
 async def is_module_enabled(ctx: commands.Context):
     if ctx.guild is None:
@@ -539,11 +552,13 @@ client.start_time = time.time()
 @client.event
 async def on_ready():
     client.db = await database()
+    client.db.row_factory = aiosqlite.Row
     await client.ipc.start()
     user = cast(discord.User, client.user)
 
-    logger.debug("starting dashboard (ipc)")
-    client.full_commands = await get_command(TOKEN, user.id, name="*")
+    # logger.debug("starting dashboard (ipc)")
+    client.full_commands = await get_commands(TOKEN, user.id)
+    client.parsed_commands = parse_commands(client.full_commands)
     global start_time
     if getattr(client, "already_ready", False):
         return

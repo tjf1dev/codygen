@@ -1,15 +1,19 @@
 import discord
+import logger
 from discord.ui import LayoutView, TextDisplay, Container, Separator, Section, ActionRow
 from ext.colors import Color
-from ext.utils import parse_commands
+from ext.commands import parse_commands
 from ext.ui_base import Message
 from models import Codygen
 from ext.errors import CodygenError
+from ext.pager import Paginator
+from typing import cast
 
 
 class HelpSelect(discord.ui.Select):
-    def __init__(self, bot: Codygen):
+    def __init__(self, bot: Codygen, user_id: int):
         self.bot: Codygen = bot
+        self.user_id: int = user_id
         options = []
 
         all_custom_commands = parse_commands(bot.full_commands)
@@ -58,7 +62,9 @@ class HelpSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         selected_cog_name = self.values[0]
         if selected_cog_name == "home":
-            await interaction.response.edit_message(view=HelpLayout(self.bot))
+            await interaction.response.edit_message(
+                view=HelpLayout(self.bot, self.user_id)
+            )
             return
         cog = self.bot.get_cog(selected_cog_name)
 
@@ -102,29 +108,38 @@ class HelpSelect(discord.ui.Select):
             await interaction.response.edit_message(view=fail)
             return
 
-        header = f"## codygen: {cog.qualified_name}\n{cog.description}\n"
-        content = ""
-        for custom_cmd in matching_commands:
-            cmd_name = custom_cmd["full_name"]
-            dpy_cmd = command_lookup.get(cmd_name)
+        header = f"# {cog.qualified_name}\n> {cog.description}\n"
+        pages: list[Message] = []
 
-            description = (
-                dpy_cmd.description
-                if (dpy_cmd and dpy_cmd.description)
-                else custom_cmd.get("description", "-")
-            )
+        for i in range(0, len(matching_commands), 5):
+            chunk = matching_commands[i : i + 5]
+            out = f"-# {i + 1}-{i + len(chunk)} / {len(matching_commands)}\n\n"
 
-            content += f"> </{custom_cmd['full_name']}:{custom_cmd['id']}>\n> `{description}`\n\n"
+            for custom_cmd in chunk:
+                cmd_name = custom_cmd["full_name"]
+                dpy_cmd = command_lookup.get(cmd_name)
+
+                description = (
+                    dpy_cmd.description
+                    if (dpy_cmd and dpy_cmd.description)
+                    else custom_cmd.get("description", "-")
+                )
+
+                out += f"</{custom_cmd['full_name']}:{custom_cmd['id']}>\n> {description}\n\n"
+
+            pages.append(Message(out))
 
         await interaction.response.edit_message(
-            view=HelpListLayout(header, content, self.bot)
+            view=HelpListLayout(
+                header, Paginator(pages, self.user_id), self.bot, self.user_id
+            )
         )
 
 
 class HelpSelectActionRow(ActionRow):
-    def __init__(self, bot):
+    def __init__(self, bot, user_id):
         super().__init__()
-        self.add_item(HelpSelect(bot))
+        self.add_item(HelpSelect(bot, user_id))
 
 
 class HelpActionRow(ActionRow):
@@ -150,7 +165,7 @@ class HelpActionRow(ActionRow):
 class HelpSection(Section):
     def __init__(self, bot: Codygen):
         if not bot.user:
-            raise CodygenError("bot/bot user not found")
+            raise CodygenError("bot user not found (what)")
         super().__init__(
             accessory=discord.ui.Thumbnail(media=bot.user.display_avatar.url)
         )
@@ -162,23 +177,36 @@ class HelpSection(Section):
 
 
 class HelpListLayout(LayoutView):
-    def __init__(self, header: str, content: str, bot: Codygen):
+    def __init__(self, header: str, content: Paginator, bot: Codygen, user_id: int):
         super().__init__(timeout=None)
         container = Container(accent_color=Color.accent)
+        content_item = cast(
+            TextDisplay,
+            cast(Container, content.content(content.current_page)).children[0],
+        )
+        buttons_item = cast(
+            ActionRow, content.buttons(content.current_page).to_actionrow()
+        )
         self.add_item(container)
         container.add_item(TextDisplay(header))
         container.add_item(Separator())
-        container.add_item(TextDisplay(content))
-        container.add_item(HelpSelectActionRow(bot))
+        logger.debug(type(content.content(content.current_page)))
+        logger.debug(type(content.content(content.current_page).children[0]))
+        logger.debug(type(content.buttons(content.current_page)))
+        logger.debug(type(content.buttons(content.current_page).to_actionrow()))
+        container.add_item(TextDisplay(content_item.content))
+        container.add_item(Separator())
+        container.add_item(buttons_item)
+        container.add_item(HelpSelectActionRow(bot, user_id))
         container.add_item(HelpActionRow())
 
 
 class HelpLayout(LayoutView):
-    def __init__(self, bot):
+    def __init__(self, bot, user_id: int):
         super().__init__(timeout=None)
         container = Container(accent_color=Color.accent)
         self.add_item(container)
         container.add_item(HelpSection(bot))
         container.add_item(Separator())
-        container.add_item(HelpSelectActionRow(bot))
+        container.add_item(HelpSelectActionRow(bot, user_id))
         container.add_item(HelpActionRow())

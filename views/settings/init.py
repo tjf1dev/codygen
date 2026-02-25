@@ -1,16 +1,18 @@
 import discord
 from discord.ui import LayoutView, TextDisplay, Container, ActionRow
 from ext.colors import Color
-from ext.logger import logger
+import logger
 import os
 from discord.ui import MediaGallery, Button
 from ext.utils import setup_guild
+from models import Module, Codygen
 
 
 class InitStartButton(discord.ui.Button):
-    def __init__(self, cog):
+    def __init__(self, cog: Module, bot: Codygen):
         super().__init__()
         self.cog = cog
+        self.bot = bot
         self.label = "Start"
         self.style = discord.ButtonStyle.primary
         self.custom_id = "init_button"
@@ -32,18 +34,21 @@ class InitStartButton(discord.ui.Button):
         self.disabled = True
         self.style = discord.ButtonStyle.secondary
         self.label = "please wait..."
-        await interaction.edit_original_response(view=InitStartLayout(self.cog))
+        await interaction.edit_original_response(
+            view=InitStartLayout(self.cog, self.bot)
+        )
         logger.debug(f"starting initialization for guild {interaction.guild.id}")
 
-        gen = setup_guild(self.cog.bot, interaction.guild, gtype=1)
+        gen = setup_guild(self.bot, interaction.guild, gtype=1)
         async for view in gen:
             await interaction.followup.send(view=view, ephemeral=True)
 
 
 class InitStartLayout(LayoutView):
-    def __init__(self, cog):
+    def __init__(self, cog: Module, bot: Codygen):
         super().__init__()
         self.cog = cog
+        self.bot = bot
         container = Container()
         self.add_item(container)
         logger.debug(os.getcwd())
@@ -53,7 +58,11 @@ class InitStartLayout(LayoutView):
             url="https://codygen.tjf1.dev",
             label="Website",
         )
-        row = ActionRow().add_item(InitStartButton(self.cog)).add_item(docs_button)
+        row = (
+            ActionRow()
+            .add_item(InitStartButton(self.cog, self.bot))
+            .add_item(docs_button)
+        )
 
         container.add_item(image)
         container.add_item(

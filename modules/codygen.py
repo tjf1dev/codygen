@@ -6,15 +6,16 @@ import aiohttp
 from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout, AddLayout
 from main import logger, get_global_config
 from ext import errors
-from models import Cog
+from models import Module, Codygen
+from typing import cast
 
 
-class codygen(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class codygen(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "core codygen features"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
-        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -31,8 +32,8 @@ class codygen(Cog):
         name="help", description="shows useful info about the bot."
     )
     async def help(self, ctx: commands.Context):
-        await self.bot.refresh_commands()
-        await ctx.reply(view=HelpLayout(self.bot), ephemeral=True)
+        # await self.bot.refresh_commands()
+        await ctx.reply(view=HelpLayout(self.bot, ctx.author.id), ephemeral=True)
 
     @commands.hybrid_command(
         name="add", description="lets you add codygen to your server or profile"
@@ -53,7 +54,7 @@ class codygen(Cog):
                 f"github: please make sure the value is in the format or AUTHOR/REPO, e.g tjf1dev/codygen, debug: {repo.split('/')}"
             )
         api_url = f"https://api.github.com/repos/{repo}/commits"
-        if self.bot.version.endswith("alpha"):
+        if self.bot.release:
             api_url += "?sha=alpha"
         headers = {}
         token = os.getenv("GITHUB_PAT")

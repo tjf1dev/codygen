@@ -6,7 +6,7 @@ import hashlib
 import json
 from quart import render_template
 
-from ext.logger import logger
+import logger
 from typing import cast
 from utils import state_to_id
 

@@ -1,6 +1,6 @@
 import discord
 import os
-from ext.logger import logger
+import logger
 from ext.utils import lfm_generate_full_state
 
 

@@ -2,14 +2,15 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from main import logger, Color
-from models import Cog
+from models import Module, Codygen
+from typing import cast
 
 
-class moderation(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class moderation(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "commands to help you manage your community."
-        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -28,8 +29,8 @@ class moderation(Cog):
     # @commands.command(name="bans", description="view the server's banned people")
 
     @commands.hybrid_command(name="bans", description="view the server's banned people")
-    @app_commands.checks.has_permissions(administrator=True)
-    @commands.has_guild_permissions(administrator=True)
+    @app_commands.checks.has_permissions(ban_members=True)
+    @commands.has_guild_permissions(ban_members=True)
     async def moderation_bans(self, ctx: commands.Context):
         if not ctx.guild or not isinstance(ctx.author, discord.Member):
             return

@@ -1,24 +1,23 @@
 from main import get_global_config
 import discord
 import requests
-import aiosqlite
-import hashlib
+import logger
 import random
 from typing import cast
 from views import GuessLayout
 from discord.ext import commands
 from ext.colors import Color
-from ext.logger import logger
+from ext.utils import percentage_from_string
 from discord import app_commands
-from models import Cog
+from models import Module, Codygen
 
 
-class fun(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class fun(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "fun commands!"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
-        self.hidden = False
 
     async def cog_load(self):
         logger.ok(f"loaded {self.__class__.__name__}")
@@ -48,21 +47,9 @@ class fun(Cog):
         if user2 is None:
             user2 = ctx.author
 
-        # name1 = user1.name
-        # name2 = user2.name
-        def generate_number_from_strings(str1, str2):
-            combined = str1 + str2
-            hash_object = hashlib.sha256(combined.encode())
-            hex_digest = hash_object.hexdigest()
-            int_value = int(hex_digest, 16)
-            number = (int_value % 100) + 1  # Maps to 1-100
-            return number
-
-        ship = str(generate_number_from_strings(user1.name, user2.name))
+        ship = str(percentage_from_string(user1.name + user2.name))
         exceptions = {
-            (1201995223996321886, 1191871707577864203): 100,
-            (978596696156147754, 1201995223996321886): 100,
-            (1379503145658486994, 1337509693874245682): 100,
+            (978596696156147754, 1379503145658486994): 101,
         }
         if user1 == user2:
             ship = 100
@@ -71,12 +58,7 @@ class fun(Cog):
             or exceptions.get((user2.id, user1.id))
             or ship
         )
-        embed = discord.Embed(
-            title="ship",
-            description=f"ship between {user1.mention} and {user2.mention} is {value}%",
-            color=Color.accent_og,
-        )
-        await ctx.reply(embed=embed)
+        await ctx.reply(f"ship between {user1.mention} and {user2.mention} is {value}%")
 
     # @verify()
     # @fun_group.command(name="awawawa", description="awawawawawawa")
@@ -167,31 +149,13 @@ class fun(Cog):
     async def wokemeter(
         self, ctx: commands.Context, user: discord.User | discord.Member | None = None
     ):
-        if ctx.guild:
-            con: aiosqlite.Connection = self.bot.db
-            cur: aiosqlite.Cursor = await con.cursor()
-            res = await cur.execute(
-                "SELECT wokemeter_min, wokemeter_max FROM guild_commands WHERE guild_id=?",
-                (ctx.guild.id,),
-            )
-            row = cast(tuple, await res.fetchone())
-            if row:
-                woke_min, woke_max = row[0], row[1]
-            else:
-                woke_min, woke_max = 0, 100
-
-        else:
-            woke_min, woke_max = 0, 100
         if user is None:
             user = ctx.author
         if user.bot:
             await ctx.reply("bots cant be woke :broken_heart:")
             return
-        else:
-            await ctx.reply(
-                f"{user.mention} is **{random.randint(int(woke_min), int(woke_max))}%** woke"
-            )
-            return
+        value = percentage_from_string(user.name)
+        await ctx.reply(f"{user.mention} is **{value}%** woke")
 
     # @verify()
     # @fun_group.command(name="wokegame", description="Check is the game woke!")

@@ -1,14 +1,15 @@
 import discord
 import aiohttp
-from discord.ext import commands
-from discord import app_commands
+import logger
 from PIL import Image
 from io import BytesIO
-from ext.logger import logger
+from discord.ext import commands
+from discord import app_commands
 from views import UserInfoLayout, ServerInfoLayout
-from ext.utils import parse_commands
+from models import Module, Codygen
+from ext.commands import parse_commands
 from ext.ui_base import Message
-from models import Cog
+from typing import cast
 
 
 async def avg_color(url):
@@ -22,10 +23,11 @@ async def avg_color(url):
     return average_color
 
 
-class info(Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.description = "pretty self explanatory"
+class info(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=True, **kwargs)
+        self.bot = cast(Codygen, bot)
+        self.description = "info about various discord things"
         self.allowed_contexts = discord.app_commands.allowed_contexts(True, True, True)
         self.hidden = False
 

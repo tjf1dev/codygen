@@ -3,18 +3,19 @@ from discord.ext import commands
 from discord import app_commands
 from main import Color, custom_api_request
 from dateutil import parser
-from ext.logger import logger
-from models import Cog
+import logger
+from models import Module, Codygen
+from typing import cast
 
 
-class applications(Cog):
-    def __init__(self, bot):
-        self.bot = bot
+class applications(Module):
+    def __init__(self, bot, **kwargs):
+        super().__init__(hidden=False, default=False, **kwargs)
+        self.bot = cast(Codygen, bot)
         self.description = "manage server applications, if you have them enabled."
         self.allowed_contexts = discord.app_commands.allowed_contexts(
             True, False, False
         )
-        self.hidden = False
 
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
