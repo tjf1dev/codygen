@@ -42,6 +42,7 @@ from ext.emotes import (
 from extensions.cache_commands import cache_commands
 from extensions.db_snapshot import snapshot_db
 from pathlib import Path
+from warnings import deprecated
 
 
 def get_global_config() -> dict:
@@ -88,6 +89,7 @@ def get_config_defaults() -> dict:
         return json.load(f)["template"]["guild"]
 
 
+@deprecated("deprecated since 0.30-beta. guild configs shouldn't be used anymore.")
 async def get_guild_config(guild_id: str | int) -> dict:
     try:
         async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
@@ -104,6 +106,7 @@ async def make_guild_config(guild_id: str | int, config: dict) -> None:
 
 # example
 # await set_guild_config_key(1234567890123456, "settings.prefix", "!")
+@deprecated("deprecated since 0.30-beta. guild configs shouldn't be used anymore.")
 async def set_guild_config_key(guild_id: str | int, key: str, value) -> bool:
     try:
         async with aiofiles.open(f"data/guilds/{guild_id}.json", "r") as f:
@@ -233,7 +236,7 @@ async def database() -> aiosqlite.Connection:
         table_names = [t[0] for t in tables]
     if not table_names:
         logger.warning(
-            "seems like its your first time starting codygen! creating database file..."
+            "looks like its your first time starting codygen! creating database file..."
         )
         logger.warning(
             "if you want to convert your existing json data into a database, run db.py"
@@ -246,13 +249,6 @@ async def database() -> aiosqlite.Connection:
     return con
 
 
-# load configs
-try:
-    with open("config.json", "r") as f:
-        data = json.load(f)
-except Exception:
-    logger.error("could not find config, generating new configuration")
-    pass
 # command configs
 data = get_global_config()
 version = open("VERSION").read()
@@ -268,7 +264,12 @@ intents = discord.Intents.all()
 client = Codygen(
     command_prefix=get_prefix,
     intents=intents,
-    status=discord.Status.idle,
+    status=discord.Status.dnd,
+    activity=discord.Activity(
+        state="starting, please wait...",
+        type=discord.ActivityType.custom,
+        name="Custom Status",
+    ),
     help_command=None,
     allowed_contexts=app_commands.AppCommandContext(
         guild=True, dm_channel=True, private_channel=True
@@ -289,8 +290,7 @@ dotenv.load_dotenv()
 client.ipc = ipcx.Server(
     cast(commands.Bot, client),
     secret_key=os.getenv("IPC_KEY"),
-    port=20000,
-    multicast_port=20002,
+    port=25000,
 )
 client.log = logging.getLogger("discord.ext.ipcx")
 client.get_modules = get_modules
@@ -404,6 +404,18 @@ async def on_command(ctx: commands.Context):
     logger.info(
         f"{command.qualified_name} has been used by {ctx.author.global_name} ({ctx.author.id})!"
     )
+
+
+# @client.event
+# async def on_shard_connect(shard_id: int):
+#     await client.change_presence(
+#         activity=discord.Activity(
+#             state=f"v{client.version}.{shard_id}",
+#             name="Custom Status",
+#             type=discord.ActivityType.custom,
+#         ),
+#         shard_id=shard_id,
+#     )
 
 
 async def update_guild_modules(
@@ -554,15 +566,13 @@ async def on_ready():
     client.db = await database()
     client.db.row_factory = aiosqlite.Row
     await client.ipc.start()
+    logger.info("ipc client started")
     user = cast(discord.User, client.user)
 
     # logger.debug("starting dashboard (ipc)")
     client.full_commands = await get_commands(TOKEN, user.id)
     client.parsed_commands = parse_commands(client.full_commands)
     global start_time
-    if getattr(client, "already_ready", False):
-        return
-    client.already_ready = True
 
     client.start_time = time.time()
     await refresh_commands()
@@ -668,6 +678,17 @@ async def on_ready():
             accent_color=Color.positive,
         )
         await ctx.reply(view=e, ephemeral=True, mention_author=False)
+
+    client.ready = True
+
+
+@client.event
+async def on_interaction(interaction: discord.Interaction):
+    if client.ready is True:
+        return
+    await interaction.response.send_message(
+        ephemeral=True, view=Message("codygen is still starting, please wait...")
+    )
 
 
 async def command_cache_cycle():

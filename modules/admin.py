@@ -31,18 +31,20 @@ class admin(Module):
         name="admin",
         description="commands for bot administrators. for development purposes",
         invoke_without_command=True,
+        aliases=["a"],
     )
     async def admin(self, ctx: commands.Context):
         pass
 
     async def cog_load(self):
         logger.ok("loaded admin")
-        version = self.bot.version  # type:ignore
         activity = discord.Activity(
-            type=discord.ActivityType.watching, name=f"v{version}"
+            type=discord.ActivityType.custom,
+            state=f"v{self.bot.version}",
+            name="Custom Status",
         )
         self.bot: Codygen
-        await self.bot.change_presence(activity=activity, status=discord.Status.idle)
+        await self.bot.change_presence(activity=activity, status=discord.Status.online)
 
     async def manage_modules(self, modules: str, action: str) -> list[str]:
         selected = modules.split()
@@ -153,11 +155,9 @@ class admin(Module):
         name="reset", description="set the status to default (version display)"
     )
     async def admin_status_refresh(self, ctx: commands.Context):
-        activity = discord.Activity(
-            type=discord.ActivityType.watching, name=f"v{version}"
-        )
+        activity = discord.CustomActivity(name=f"v{self.bot.version}")
         self.bot: Codygen
-        await self.bot.change_presence(activity=activity, status=discord.Status.idle)
+        await self.bot.change_presence(activity=activity, status=discord.Status.online)
         await ctx.message.add_reaction("✅")
 
     @commands.is_owner()
@@ -170,10 +170,10 @@ class admin(Module):
         file = await aiofiles.open("VERSION")
         before = self.bot.version
         self.bot.version = await file.read()
-        activity = discord.Activity(
-            type=discord.ActivityType.watching, name=f"v{self.bot.version}"
+        await self.bot.change_presence(
+            activity=discord.CustomActivity(name=f"v{self.bot.version}"),
+            status=discord.Status.online,
         )
-        await self.bot.change_presence(activity=activity, status=discord.Status.idle)
         await ctx.reply(
             view=Message(
                 f"running {f'~~v{before}~~ ' if before != self.bot.version else ''}v{self.bot.version} {'(unchanged)' if before == self.bot.version else ''}"
@@ -206,7 +206,7 @@ class admin(Module):
         if status == 1:
             status = discord.Status.dnd
         if status == 2:
-            status = discord.Status.idle
+            status = discord.Status.online
         if status == 3:
             status = discord.Status.invisible
         else:

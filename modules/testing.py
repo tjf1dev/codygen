@@ -1,6 +1,8 @@
+import logger
+import discord
+from ext import errors
 from ext.utils import parse_flags
 from discord.ext import commands
-import logger
 from ext.ui_base import Message
 from ext.utils import setup_guild
 from ext.pager import Paginator
@@ -78,6 +80,29 @@ class testing(Module):
         else:
             content += "-# one or more emotes are missing!"
         await ctx.reply(view=Message(content))
+
+    @test.command("error")
+    async def error(self, ctx: commands.Context, *, type: int = 2):
+        """raises an error (lol)"""
+        match type:
+            case 1:
+                raise errors.CodygenError
+            case 2:
+                raise errors.CodygenUserError
+            case 3:
+                raise ValueError
+            case 4:
+                raise errors.MissingEnvironmentVariable
+            case 5:
+                raise commands.errors.CommandNotFound
+            case 6:
+                raise commands.errors.NotOwner
+            case 7:
+                raise commands.errors.MissingPermissions([])
+            case 8:
+                raise commands.errors.HybridCommandError(
+                    discord.app_commands.AppCommandError()
+                )
 
 
 async def setup(bot):

@@ -65,7 +65,7 @@ def run():
 
 @app.command()
 def api():
-    from extensions.api import main as run_api
+    from web.web import main as run_api
 
     run_api()
 

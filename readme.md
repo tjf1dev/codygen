@@ -8,8 +8,7 @@
 
 ## about the app
 
-> codygen is a small multipurpose Discord bot made by [tjf1](https://github.com/tjf1dev)
-> made in discord.py <3
+> codygen is multipurpose Discord bot made with love by [tjf1](https://github.com/tjf1dev), in python and discord.py
 
 ## support
 

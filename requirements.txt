@@ -11,6 +11,7 @@ aiofiles
 typer
 rich
 colorama
+readchar
 
 # networking
 fastapi
@@ -19,6 +20,7 @@ quartcord
 quart_cors
 quart
 requests
+uvicorn
 
 # other
 python-dotenv 
@@ -26,3 +28,4 @@ aiosqlite
 pillow
 psutil
 python-dateutil
+matplotlib

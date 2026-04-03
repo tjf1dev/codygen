@@ -36,7 +36,9 @@ class codygen(Module):
         await ctx.reply(view=HelpLayout(self.bot, ctx.author.id), ephemeral=True)
 
     @commands.hybrid_command(
-        name="add", description="lets you add codygen to your server or profile"
+        name="add",
+        description="lets you add codygen to your server or profile",
+        aliases=["invite"],
     )
     async def add(self, ctx: commands.Context):
         await ctx.reply(view=AddLayout(self.bot), ephemeral=False)

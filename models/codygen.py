@@ -32,6 +32,8 @@ class Codygen(commands.AutoShardedBot):
     full_commands: list[dict[str, Any]]
     parsed_commands: list[dict[str, Any]]
 
+    ready: bool = False
+
     def emote(self, name: str):
         return next(em for em in self.emotes if em.name == name)
 

@@ -3,7 +3,14 @@ class Color:
     list of colors available in the codygen color pallete.
     usage:
         from ext.colors import Color
-        e = discord.Embed(color=Color.accent)
+
+        # in embed:
+        import discord
+        e = discord.Embed(..., color=Color.accent)
+
+        # in message:
+        from ext.ui_base import Message
+        v = Message(..., accent_color=Color.accent)
     """
 
     gray = 0xA5A2A8
