@@ -7,23 +7,25 @@ class CodygenError(Exception):
 class CodygenUserError(CodygenError):
     """user-facing error. displays a nice error message"""
 
-    pass
+    ...
 
 
-class DefaultError(CodygenError):
-    pass
+class GuildExistsError(CodygenError):
+    """raised when trying to initialize an existing guild. should be ignored"""
+
+    ...
 
 
-class MisconfigurationError(CodygenError):
-    pass
+class DefaultError(CodygenError): ...
 
 
-class MissingEnvironmentVariable(CodygenError):
-    pass
+class MisconfigurationError(CodygenError): ...
 
 
-class FormDecodeError(CodygenError):
-    pass
+class MissingEnvironmentVariable(CodygenError): ...
+
+
+class FormDecodeError(CodygenError): ...
 
 
 class LastfmLoggedOutError(CodygenError):
@@ -32,8 +34,7 @@ class LastfmLoggedOutError(CodygenError):
         self.message = message
 
 
-class ModuleDisabledError(CodygenError):
-    pass
+class ModuleDisabledError(CodygenError): ...
 
 
 class UnknownEmoteError(CodygenError):

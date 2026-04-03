@@ -12,10 +12,10 @@ async def get_commands(token: str, client_id: str | int) -> List[Dict[str, Any]]
 
 
 async def get_command(
-    token: str, client_id: str | int, id: int = 0, name: str = ""
+    token: str, client_id: str | int, id: int = 0, name: str = "", full_name: str = ""
 ) -> Dict | List[Dict[str, Any]]:
     """
-    gets information about a command by name or id
+    gets information about a command by name, full name or id
     one of those is required
     set name to * for all commands
     dedicated to discord.py since you cannot include command ids in your classes
@@ -36,6 +36,8 @@ async def get_command(
 
         for command in data:
             if id in command["id"]:
+                return command
+            if full_name in command["full_name"]:
                 return command
             if name in command["name"]:
                 return command
@@ -152,32 +154,6 @@ def parse_commands(commands, bot=None) -> list[dict]:
 
 
 def map_custom_commands_to_cogs(bot: Codygen):
-    """
-    maps custom commands to their corresponding discord.py commands and cogs.
-    returns only JSON-serializable data.
-
-    Args:
-        bot: the Codygen instance
-
-    Returns:
-        list: a list of dictionaries with custom command data plus cog info (JSON-serializable)
-        Structure: [
-            {
-                # all original custom command data (id, full_name, etc.)
-                'id': '...',
-                'full_name': '...',
-                'description': '...',
-                # alus cog data (serializable only)
-                'cog_name': str,
-                'cog_description': str,
-                'dpy_description': str,  # description from discord.py command
-                'dpy_help': str,         # help text from discord.py command
-                'dpy_usage': str,        # usage from discord.py command
-                'dpy_brief': str         # brief description from discord.py command
-            }
-        ]
-    """
-
     def get_full_command_name(cmd):
         return (
             f"{cmd.full_parent_name} {cmd.name}" if cmd.full_parent_name else cmd.name
@@ -186,11 +162,9 @@ def map_custom_commands_to_cogs(bot: Codygen):
     # get all custom commands
     all_custom_commands = parse_commands(bot.full_commands)
 
-    # create lookup dictionary for all discord.py commands
     dpy_command_lookup = {}
     cog_lookup = {}
 
-    # build lookup tables from all cogs
     for cog_name, cog in bot.cogs.items():
         if cog_name.lower() in ["jishaku"]:
             continue
@@ -201,23 +175,22 @@ def map_custom_commands_to_cogs(bot: Codygen):
             dpy_command_lookup[full_name] = cmd
             cog_lookup[full_name] = (cog, cog_name)
 
-    # map custom commands to discord.py commands and cogs (JSON-serializable only)
     mapped_commands = []
 
     for custom_cmd in all_custom_commands:
         cmd_full_name = custom_cmd["full_name"]
 
-        # find matching discord.py command and cog
         dpy_cmd = dpy_command_lookup.get(cmd_full_name)
         cog_info = cog_lookup.get(cmd_full_name)
 
         if dpy_cmd and cog_info:
             cog, cog_name = cog_info
-            # create new dict with all custom data plus serializable cog info
             mapped_cmd = {
-                **custom_cmd,  # spread all custom command data
-                "cog_name": cog_name,
-                "cog_description": getattr(cog, "description", "") or "",
+                **custom_cmd,
+                "cog": {
+                    "name": cog_name,
+                    "description": getattr(cog, "description", None),
+                },
             }
             mapped_commands.append(mapped_cmd)
 

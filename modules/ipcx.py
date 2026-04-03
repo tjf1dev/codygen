@@ -4,7 +4,7 @@ import traceback
 import sys
 import json
 import discord
-from discord.ext import ipcx  # type: ignore ; why does pylance hate this so much
+from discord.ext import ipcx  # type: ignore
 from ext.cache import TTLCache
 import logger
 from discord import Permissions
@@ -13,7 +13,6 @@ from discord.abc import GuildChannel
 from models import Codygen
 from typing import cast
 from models import Module
-
 
 # sometimes i hate looking at my own code
 # but i also love it knowing i improved so much

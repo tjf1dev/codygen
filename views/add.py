@@ -1,11 +1,13 @@
 import discord
+from models import Codygen
 from discord.ui import LayoutView, TextDisplay, Container, Section, Button, Separator
 from ext.colors import Color
 
 
 class AddLayout(LayoutView):
-    def __init__(self, bot):
+    def __init__(self, bot: Codygen):
         super().__init__()
+        assert bot.user is not None
         aid = bot.user.id
         guild = f"https://discord.com/oauth2/authorize?client_id={aid}&integration_type=0&scope=bot%20applications.commands&permissions=8"
         user = f"https://discord.com/oauth2/authorize?client_id={aid}&integration_type=1&scope=applications.commands"
@@ -38,7 +40,7 @@ class AddLayout(LayoutView):
         if not bot.release:
             container.add_item(
                 TextDisplay(
-                    "> **warning!**\n> this version is not marked as a release target.\n> the installation links may not work"
+                    f"> {bot.emote('warning')} **Warning!**\n> this version is not marked as a release target.\n> the installation links may not work"
                 )
             )
         container.add_item(Separator())

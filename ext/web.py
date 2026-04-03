@@ -10,6 +10,10 @@ import logger
 from typing import cast
 from utils import state_to_id
 
+#! this is the OLD api. it should not be used.
+# check out the web dir instead -> entry point web.web
+# warning - the new api does not have lastfm support yet.
+
 # import ext.errors
 from main import ensure_env
 

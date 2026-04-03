@@ -26,7 +26,7 @@ async def create_table():
                 logging_settings TEXT DEFAULT '{{}}',
                 module_settings TEXT DEFAULT '{{}}',
                 config_ver INTEGER DEFAULT {config_ver},
-                timestamp INTEGER NOT NULL
+                timestamp INTEGER DEFAULT (strftime('%s', 'now'))
             )
             """
         )
@@ -93,7 +93,8 @@ async def create_table():
                 utility BOOLEAN NOT NULL,
                 logging BOOLEAN NOT NULL,
                 ticket BOOLEAN NOT NULL,
-                testing BOOLEAN NOT NULL
+                testing BOOLEAN NOT NULL,
+                forms BOOLEAN NOT NULL
             )"""
         )
         await con.execute(
@@ -111,7 +112,7 @@ async def create_table():
                 event_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id INTEGER NOT NULL,
                 author_id INTEGER NOT NULL,
-                timestamp INTEGER NOT NULL,
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 min_range INTEGER DEFAULT 0,
                 max_range INTEGER DEFAULT 10
             )"""
@@ -121,7 +122,7 @@ async def create_table():
                 event_id INTEGER,
                 user_id INTEGER,
                 number INTEGER,
-                timestamp INTEGER NOT NULL,
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 FOREIGN KEY (event_id) REFERENCES xp_wheel_event(event_id),
                 PRIMARY KEY (event_id, user_id)
             )"""
@@ -138,14 +139,14 @@ async def create_table():
                 guild_id INTEGER NOT NULL,
                 active INTEGER,
                 name TEXT NOT NULL,
-                timestamp INTEGER NOT NULL
+                timestamp INTEGER DEFAULT (strftime('%s', 'now'))
             )"""
         )
         await con.execute(
             """CREATE TABLE IF NOT EXISTS uotm_candidates (
                 event_id INTEGER,
                 user_id TEXT NOT NULL,
-                timestamp INTEGER NOT NULL,
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 PRIMARY KEY (event_id, user_id),
                 FOREIGN KEY (event_id) REFERENCES uotm_events(event_id)
             )"""
@@ -155,7 +156,7 @@ async def create_table():
                 event_id INTEGER,
                 user_id INTEGER,
                 vote_id INTEGER,
-                timestamp INTEGER NOT NULL,
+                timestamp INTEGER DEFAULT (strftime('%s', 'now')),
                 PRIMARY KEY (event_id, user_id),
                 FOREIGN KEY (event_id) REFERENCES uotm_events(event_id)
             )"""
@@ -164,7 +165,7 @@ async def create_table():
             """CREATE TABLE IF NOT EXISTS tickets (
                 author_id INTEGER, --? ID of the user who created the ticket
                 users TEXT DEFAULT '[]', --? list of IDs 
-                timestamp INTEGER NOT NULL
+                timestamp INTEGER DEFAULT (strftime('%s', 'now'))
             )"""
         )
         logger.info("created (missing?) tables")

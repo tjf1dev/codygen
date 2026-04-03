@@ -22,7 +22,15 @@ from typing import Any, cast
 from models import Codygen
 import ext.errors
 from models import Module
-from ext.utils import timestamp
+from ext.utils import timestamp, is_int
+
+
+# after this the bot gets pretty slow
+GLOBAL_LEVEL_CAP = 56890
+GLOBAL_XP_CAP = 1000000000000
+
+GLOBAL_MIN_LEVEL_CAP = -GLOBAL_LEVEL_CAP
+GLOBAL_MIN_XP_CAP = -GLOBAL_XP_CAP
 
 
 async def get_boosts(cur: aiosqlite.Cursor, guild: discord.Guild, user: discord.Member):
@@ -246,10 +254,11 @@ class level(Module):
 
     @commands.Cog.listener("on_message")
     async def level_event(self, message):
+        if message.author.bot:
+            return
         try:
             await self.xp(message.author, message.guild, self.db)
         except AttributeError:  # no db loaded yet
-            logger.warning("tried to obtain xp before fully initialized")
             pass
 
     async def cog_load(self):
@@ -262,6 +271,8 @@ class level(Module):
         Main handler for xp gain
         This takes boosts to account, levelup message is sent seperately
         """
+        if user.bot:
+            return
         cur: aiosqlite.Cursor = await con.cursor()
 
         # fetch xp per message
@@ -279,6 +290,11 @@ class level(Module):
 
         base = per_message_row[0] if per_message_row else 0
         xp = xp_row[0] if xp_row else 0
+
+        if GLOBAL_MIN_XP_CAP <= xp >= GLOBAL_XP_CAP:
+            logger.debug(f"{user.id}'s xp has reached the global xp cap.")
+            return
+
         multiplier_func = await get_boosts(cur, guild, user)
         multiplier = multiplier_func["multiplier"]
         add = int(base * (1 + multiplier / 100))
@@ -293,8 +309,23 @@ class level(Module):
             "UPDATE users SET xp = xp + ? WHERE guild_id = ? AND user_id = ?",
             (add, guild.id, user.id),
         )
+
         conv = converter(xp)
         new_xp = xp + add
+
+        if new_xp > GLOBAL_XP_CAP or new_xp < GLOBAL_MIN_XP_CAP:
+            logger.warning(f"{user.id}'s xp is out of bounds! updating it...")
+            val = GLOBAL_MIN_XP_CAP if new_xp < GLOBAL_MIN_XP_CAP else GLOBAL_XP_CAP
+            await cur.execute(
+                "UPDATE users SET xp = ? WHERE guild_id = ? AND user_id = ?",
+                (val, guild.id, user.id),
+            )
+            return
+
+        if new_xp == GLOBAL_XP_CAP:
+            logger.debug(f"{user.id}'s xp has reached the global xp cap.")
+            return
+
         new_conv = converter(new_xp)
         level = conv.level
         new_level = new_conv.level
@@ -491,6 +522,8 @@ class level(Module):
             user = ctx.guild.get_member(ctx.author.id)
             if not user:
                 user = await ctx.guild.fetch_member(ctx.author.id)
+        if user.bot:
+            raise ext.errors.CodygenUserError("bots cannot use leveling")
         boosts = await get_boosts(cur, ctx.guild, user)
         await ctx.reply(
             view=LevelBoostsLayout(boosts),
@@ -509,6 +542,8 @@ class level(Module):
             user = ctx.guild.get_member(ctx.author.id)
             if not user:
                 user = await ctx.guild.fetch_member(ctx.author.id)
+        if user.bot:
+            raise ext.errors.CodygenUserError("bots cannot use leveling")
         # data collection
 
         xp_res = await cur.execute(
@@ -593,11 +628,16 @@ class level(Module):
         logger.debug(
             f"{user.name} ({user.id}) has {xp}, which puts them at level {level}"
         )
+        content = ""
+        if multiplier["multiplier"]:
+            content += f"-# xp boost: **{multiplier['multiplier']}%**!"
+
+        if xp in [GLOBAL_MIN_XP_CAP, GLOBAL_XP_CAP]:
+            content += "-# xp has reached global limit, cannot gain more"
+
         try:
             await ctx.reply(
-                content=f"-# xp boost: **{multiplier['multiplier']}%**!"
-                if multiplier["multiplier"]
-                else None,
+                content=content if content else None,
                 file=discord.File(img_path),
             )
         finally:
@@ -740,19 +780,27 @@ class level(Module):
     async def levelset(
         self, ctx: commands.Context, xp: str, user: discord.Member | None = None
     ):
-        con: aiosqlite.Connection = ctx.bot.db
-        cur: aiosqlite.Cursor = await con.cursor()
         if not isinstance(ctx.author, discord.Member) or not ctx.guild:
             return
         if user is None:
             user = ctx.author
-        if xp.isdigit():
+        if user.bot:
+            raise ext.errors.CodygenUserError("bots cannot use leveling")
+        if is_int(xp):
             xpr = int(xp)
+            if xpr < GLOBAL_MIN_XP_CAP or xpr > GLOBAL_XP_CAP:
+                raise ext.errors.CodygenUserError("target xp exceeds global limit")
         elif xp.lower().endswith("l"):
-            xpr = converter(int(xp[:-1])).xp
+            level_int = int(xp[:-1])
+            if level_int < GLOBAL_MIN_LEVEL_CAP or level_int > GLOBAL_LEVEL_CAP:
+                raise ext.errors.CodygenUserError("target level exceeds global limit")
+            xpr = converter(level=level_int).xp
         else:
-            await ctx.reply(view=Message("## invalid level provided."))
-            return
+            raise ext.errors.CodygenUserError("invalid level provided")
+
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+
         logger.debug(f"attempting to set {user.id}'s xp to {xpr}")
         await cur.execute(
             "INSERT OR REPLACE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
@@ -776,10 +824,27 @@ class level(Module):
     async def leveladd(
         self, ctx: commands.Context, xp: str, user: discord.Member | None = None
     ):
-        con: aiosqlite.Connection = ctx.bot.db
-        cur: aiosqlite.Cursor = await con.cursor()
         if not isinstance(ctx.author, discord.Member) or not ctx.guild:
             return
+        if user is None:
+            user = ctx.author
+        if user.bot:
+            raise ext.errors.CodygenUserError("bots cannot use leveling")
+        if is_int(xp):
+            xpr = int(xp)
+            if xpr < GLOBAL_MIN_XP_CAP or xpr > GLOBAL_XP_CAP:
+                raise ext.errors.CodygenUserError("target xp exceeds global limit")
+        elif xp.lower().endswith("l"):
+            level_int = int(xp[:-1])
+            if level_int < GLOBAL_MIN_LEVEL_CAP or level_int > GLOBAL_LEVEL_CAP:
+                raise ext.errors.CodygenUserError("target level exceeds global limit")
+            xpr = converter(level=level_int).xp
+        else:
+            raise ext.errors.CodygenUserError("invalid level provided")
+
+        con: aiosqlite.Connection = ctx.bot.db
+        cur: aiosqlite.Cursor = await con.cursor()
+
         if user is None:
             user = ctx.author
         current_xp_res = await cur.execute(
@@ -788,26 +853,20 @@ class level(Module):
         )
         current_row = await current_xp_res.fetchone()
         current_xp = current_row[0] if current_row else 0
-        if isinstance(xp, str) and xp.lower().endswith("l"):
-            levels_to_add = int(xp[:-1])
-            xp_to_add = (
-                converter(level=converter(current_xp).level + levels_to_add).xp
-                - current_xp
-            )
-        else:
-            xp_to_add = int(xp)
 
-        new_xp = current_xp + xp_to_add
+        new_xp = current_xp + xpr
+        if new_xp < GLOBAL_MIN_XP_CAP or new_xp > GLOBAL_XP_CAP:
+            raise ext.errors.CodygenUserError("target xp exceeds global limit")
 
+        logger.debug(f"attempting to set {user.id}'s xp to {xpr}")
         await cur.execute(
             "INSERT OR REPLACE INTO users (guild_id, user_id, xp) VALUES (?, ?, ?)",
-            (ctx.guild.id, user.id, new_xp),
+            (ctx.guild.id, user.id, int(new_xp)),
         )
         await con.commit()
-
         await ctx.reply(
             view=Message(
-                f"## added `{xp_to_add}` xp to {user.mention}. (level `{converter(new_xp).level}`)"
+                f"## set {user.mention}'s xp to `{new_xp}` (level `{converter(new_xp).level}`)."
             ),
             ephemeral=True,
         )

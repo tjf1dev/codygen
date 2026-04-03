@@ -6,7 +6,7 @@ import logger
 import os
 import sys
 import discord
-import time
+from ext.commands import get_command
 from typing import Tuple, Optional, Any, List, AsyncGenerator
 from ext.config import DEFAULT_MODULE_OVERRIDE, DEFAULT_MODULE_STATE
 from models import Codygen
@@ -202,6 +202,14 @@ def ensure_env():
         sys.exit(1)
 
 
+def is_int(s: str) -> bool:
+    try:
+        int(s)
+        return True
+    except ValueError:
+        return False
+
+
 def permissions_to_list(perms: discord.Permissions) -> list:
     enabled = [name.replace("_", " ").title() for name, value in perms if value]
     return enabled if enabled else ["[none]"]
@@ -240,7 +248,8 @@ async def setup_guild(
     logger.debug("attempting to insert database values")
     db: aiosqlite.Connection = bot.db
     error = None
-    ts = round(time.time())
+    config_already_made = False
+    ts = datetime.datetime.now(datetime.timezone.utc).timestamp()
     try:
         await db.execute(
             "INSERT INTO guilds (guild_id, timestamp) VALUES (?, ?)", (guild.id, ts)
@@ -251,22 +260,20 @@ async def setup_guild(
         logger.warning(
             f"failed when inserting guild data for {guild.id}; {type(e).__name__}: {e}"
         )
-        config_already_made = True
-        error = e
+        if str(e).startswith("UNIQUE constraint failed"):
+            config_already_made = True
+        else:
+            error = e
     try:
         cog_names = bot.get_modules().keys()
-
         columns = ["guild_id", *cog_names]
         placeholders = ", ".join("?" for _ in columns)
-
         values = [
             guild.id,
             *(DEFAULT_MODULE_OVERRIDE.get(c, DEFAULT_MODULE_STATE) for c in cog_names),
         ]
-        for c in cog_names:
-            columns.append(c)
-            values.append(DEFAULT_MODULE_OVERRIDE.get(c, DEFAULT_MODULE_STATE))
         logger.debug(f"{cog_names} {bot.cogs} {columns} {placeholders}")
+
         await db.execute(
             f"INSERT INTO modules ({', '.join(columns)}) VALUES ({placeholders})",
             values,
@@ -278,12 +285,13 @@ async def setup_guild(
                 logger.error(
                     f"database is outdated. please use ./codygen db add_column or ./codygen db recreate to add the '{str(e).split()[len(str(e).split()) - 1]}' column."
                 )
-
         logger.warning(
             f"failed when inserting module data for {guild.id}; {type(e).__name__}: {e}"
         )
-        error = e
-        pass
+        if str(e).startswith("UNIQUE constraint failed"):
+            config_already_made = True
+        else:
+            error = e
     await db.commit()
     bot_member = guild.me
     required_permissions = discord.Permissions(
@@ -322,9 +330,18 @@ async def setup_guild(
         yield permission_error
         logger.debug("yielded permission_error")
 
+    modules_command = "/settings modules"
+    modules_command_id = next(
+        (m["id"] for m in bot.parsed_commands if m["full_name"] == "settings modules"),
+        0,
+    )
+
+    if modules_command_id:
+        modules_command = f"</settings modules:{modules_command_id}>"
+
     stage2 = Message(
         message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}\n"
-        "\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run /settings modules in the server to configure modules, or use the dashboard.",
+        f"\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run {modules_command} in the server to configure modules, or use the dashboard.",
         accent_color=Color.positive,
     )
     if error:

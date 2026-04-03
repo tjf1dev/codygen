@@ -110,9 +110,9 @@ class HelpSelect(discord.ui.Select):
 
         header = f"# {cog.qualified_name}\n> {cog.description}\n"
         pages: list[Message] = []
-
-        for i in range(0, len(matching_commands), 5):
-            chunk = matching_commands[i : i + 5]
+        COMMANDS_PER_PAGE = 12
+        for i in range(0, len(matching_commands), COMMANDS_PER_PAGE):
+            chunk = matching_commands[i : i + COMMANDS_PER_PAGE]
             out = f"-# {i + 1}-{i + len(chunk)} / {len(matching_commands)}\n\n"
 
             for custom_cmd in chunk:
@@ -191,7 +191,7 @@ class HelpListLayout(LayoutView):
         container.add_item(TextDisplay(header))
         container.add_item(Separator())
         logger.debug(type(content.content(content.current_page)))
-        logger.debug(type(content.content(content.current_page).children[0]))
+        logger.debug(type(content.content(content.current_page).children[0]))  # type: ignore
         logger.debug(type(content.buttons(content.current_page)))
         logger.debug(type(content.buttons(content.current_page).to_actionrow()))
         container.add_item(TextDisplay(content_item.content))

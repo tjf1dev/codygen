@@ -573,10 +573,15 @@ class logging(Module):
     @log_event("Message edit", 1)
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        try:
+            mention = cast(discord.TextChannel, before.channel).mention + " "
+        except AttributeError:
+            mention = ""
+
         await self.send_log(
             title="Message edit",
             description=f"> ID: `{after.id}`\n"
-            f"> Channel: {cast(discord.TextChannel, before.channel).mention} ([`{before.channel.id}`]({before.channel.jump_url}))\n"
+            f"> Channel: {mention}([`{before.channel.id}`]({before.channel.jump_url}))\n"
             f"> Author: {after.author.mention} (`{after.author.name}` • `{after.author.id}`)\n"
             f"> Created: {timestamp(before.created_at.timestamp())}\n",
             Before=f"{describe_message(before)}",

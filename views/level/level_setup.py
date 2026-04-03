@@ -78,11 +78,15 @@ class LevelSetupModal(Modal):
         xp_input = cast(TextInput, xp_label.component)
         channel_label = cast(Label, self.find_item(1))
         channel_input = cast(ChannelSelect, channel_label.component)
+
+        level_per_message = int(xp_input.value) if xp_input.value else None
+        levelup_channel = channel_input.values[0].id if channel_input.values else None
+
         response = Message(
             f"## level setup\n"
             f"{self.bot.emote('loading')} submitting values... please wait\n"
             f"xp per message: `{int(xp_input.value)}\n`"
-            f"level up channel: {channel_input.values[0].mention}\n"
+            f"level up channel: {levelup_channel if levelup_channel else '[none]'}\n"
         )
         fail = False
         if not xp_input.value.isdigit():
@@ -105,9 +109,6 @@ class LevelSetupModal(Modal):
             return
         db = self.bot.db
 
-        level_per_message = int(xp_input.value) if xp_input.value else None
-        levelup_channel = channel_input.values[0].id if channel_input.values else None
-
         if level_per_message is not None or levelup_channel is not None:
             sql_parts = []
             params = []
@@ -129,6 +130,6 @@ class LevelSetupModal(Modal):
             view=Message(
                 f"## {self.bot.emote('success')} level setup\n"
                 f"xp per message: `{int(xp_input.value)}\n`"
-                f"level up channel: {channel_input.values[0].mention}\n"
+                f"level up channel: {levelup_channel}\n"
             )
         )
