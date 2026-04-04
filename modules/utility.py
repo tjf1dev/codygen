@@ -322,19 +322,6 @@ class utility(Module):
             await channel.send(pingc, reference=msg)
         await ctx.reply("closed!", ephemeral=True)
 
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if not self.bot.user:
-            return
-        if message.author.bot:
-            return
-        if message.content.strip() == f"<@{self.bot.user.id}>":
-            e = Message(
-                message=f"# hey there! im codygen\n### try using </help:1338168344506925108>! the prefix for this server is: `{await get_prefix(self.bot, message)}`",
-                accent_color=Color.accent,
-            )
-            await message.reply(view=e)
-
     # * maybe move this to a different cog?
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @utility.group(

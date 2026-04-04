@@ -272,7 +272,7 @@ async def setup_guild(
             guild.id,
             *(DEFAULT_MODULE_OVERRIDE.get(c, DEFAULT_MODULE_STATE) for c in cog_names),
         ]
-        logger.debug(f"{cog_names} {bot.cogs} {columns} {placeholders}")
+        # logger.debug(f"{cog_names} {bot.cogs} {columns} {placeholders}")
 
         await db.execute(
             f"INSERT INTO modules ({', '.join(columns)}) VALUES ({placeholders})",
@@ -330,18 +330,26 @@ async def setup_guild(
         yield permission_error
         logger.debug("yielded permission_error")
 
-    modules_command = "/settings modules"
     modules_command_id = next(
         (m["id"] for m in bot.parsed_commands if m["full_name"] == "settings modules"),
         0,
     )
-
     if modules_command_id:
         modules_command = f"</settings modules:{modules_command_id}>"
+    else:
+        modules_command = "/settings modules"
+    prefix_command_id = next(
+        (m["id"] for m in bot.parsed_commands if m["full_name"] == "settings prefix"),
+        0,
+    )
+    if prefix_command_id:
+        prefix_command = f"</settings prefix:{prefix_command_id}>"
+    else:
+        prefix_command = "/settings prefix"
 
     stage2 = Message(
-        message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated!' if config_already_made else 'a configuration has been created for your guild!'}\n"
-        f"\n> **warning**\n> most commands won't work unless their modules are enabled.\n> run {modules_command} in the server to configure modules, or use the dashboard.",
+        message=f"# initialization finished!\n> no errors found\npermissions\n> the bot has sufficient permissions to work!\nconfig\n> {'a configuration already exists and has been updated! (module settings have not been modified)' if config_already_made else 'a configuration has been created for your guild!'}\n"
+        f"\n> **what now?**\n> - use {modules_command} to configure modules.\n> - the default command prefix is `>`. use {prefix_command} to change it",
         accent_color=Color.positive,
     )
     if error:

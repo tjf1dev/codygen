@@ -4,6 +4,10 @@ import discord
 import os
 import aiohttp
 from views import PingLayout, HelpLayout, ChangelogLayout, AboutLayout, AddLayout
+from ext.ui_base import Message
+from ext.colors import Color
+from ext.commands import get_command_id_by_full_name
+from main import get_prefix
 from main import logger, get_global_config
 from ext import errors
 from models import Module, Codygen
@@ -122,6 +126,20 @@ class codygen(Module):
             co = c["contributions"]
             contributors += f"[`{c['login']}`](<{c['html_url']}>): {co} contribution{'s' if co > 1 else ''}\n"
         await ctx.reply(view=AboutLayout(self.bot, contributors))
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if not self.bot.user:
+            return
+        if message.author.bot:
+            return
+        prefix = await get_prefix(self.bot, message)
+        if message.content.strip() == f"<@{self.bot.user.id}>":
+            e = Message(
+                message=f"# hey there! im codygen\n-# </help:{get_command_id_by_full_name(self.bot, 'help')}>{f' • prefix: `{prefix}`' if prefix else ''}",
+                accent_color=Color.accent,
+            )
+            await message.reply(view=e)
 
 
 async def setup(bot):

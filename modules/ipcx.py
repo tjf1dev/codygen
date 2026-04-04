@@ -142,6 +142,7 @@ guild_cache = TTLCache(ttl_seconds=300)
 state_cache = TTLCache(ttl_seconds=300)
 
 
+# TODO update this (module_settings column is depracated) (0.40-alpha)
 def prepare_guild(data: dict) -> dict:
     try:
         config = data.get("config", {})

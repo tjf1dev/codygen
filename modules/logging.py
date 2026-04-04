@@ -152,6 +152,8 @@ class logging(Module):
         return found
 
     async def get_log_channel(self, guild: discord.Guild, title: str) -> int:
+        if not guild:
+            return 0
         db = self.bot.db
         event = self.event_from_title(title)
         if not event:

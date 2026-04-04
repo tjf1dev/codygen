@@ -55,4 +55,5 @@ async def cache_commands(bot: Codygen, _commands: list[dict] | None = None):
     trim(docs_cache)
 
     logger.info(f"{len(commands)} commands cached")
+    bot.parsed_commands = commands
     return commands
