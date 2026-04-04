@@ -40,10 +40,13 @@ class ModulesConfirmButton(Button):
             new_state = module in self.selected_modules
             if state != new_state:
                 self.module_settings[module] = new_state
-        settings_str = json.dumps(self.module_settings, indent=4)
+        values = []
+        for m in self.module_settings.values():
+            values.append(m)
+        values.append(interaction.guild_id)
         await con.execute(
-            "UPDATE guilds SET module_settings=? WHERE guild_id=?",
-            (settings_str, interaction.guild_id),
+            f"UPDATE modules SET {', '.join([f'{m}=?' for m in self.module_settings.keys()])} WHERE guild_id=?",
+            values,
         )
         await con.commit()
         await interaction.edit_original_response(view=ModulesSuccess(self.change_text))
@@ -132,10 +135,10 @@ class SettingsModulesLayout(LayoutView):
         row = ActionRow()
         row.add_item(ModuleSelect(bot, module_settings, user_id))
 
-        cont.add_item(TextDisplay("## module setup"))
+        cont.add_item(TextDisplay("# module setup"))
         cont.add_item(Separator())
         cont.add_item(
-            TextDisplay("select modules that will be allowed in this server.")
+            TextDisplay("select modules that will be enabled in this server.")
         )
         cont.add_item(row)
         self.add_item(cont)

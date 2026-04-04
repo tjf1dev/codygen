@@ -30,7 +30,7 @@ from ext.commands import get_commands, parse_commands
 from discord.ext import ipcx  # type: ignore
 from ext.ui_base import Message
 from ext.config import DEFAULT_CONFIG, DEFAULT_MODULE_STATE, DEFAULT_MODULE_OVERRIDE
-from models import Codygen
+from models import Codygen, Module
 from typing import cast
 from ext.errors import CodygenError
 from ext.emotes import (
@@ -140,28 +140,35 @@ def state_to_id(state: str) -> str:
 async def get_prefix(
     bot: Codygen | commands.Bot | commands.AutoShardedBot | None = None,
     message: discord.Message | None = None,
-) -> str | None:
-    default_prefix = get_global_config().get("default_prefix", ">")
+) -> str:
     if not bot or not message or not message.guild:
-        return default_prefix
+        return ""
     bot = cast(Codygen, bot)
     if not hasattr(bot, "db"):
         logger.warning("tried to get prefix before fully initialized")
-        return default_prefix
-    con: aiosqlite.Connection = bot.db
+        return ""
 
+    con: aiosqlite.Connection = bot.db
     cur: aiosqlite.Cursor = await con.cursor()
+
     try:
-        res = await cur.execute(
-            "SELECT prefix FROM guilds WHERE guild_id=?", (message.guild.id,)
-        )
-        prefix_row = await res.fetchone() or [default_prefix]
-        prefix = prefix_row[0]
-        if message is None or prefix is None:
-            return default_prefix
-        return prefix
+        prefix = await (
+            await cur.execute(
+                "SELECT prefix FROM guilds WHERE guild_id=?", (message.guild.id,)
+            )
+        ).fetchone()
+        prefix_enabled = await (
+            await cur.execute(
+                "SELECT prefix_enabled FROM guilds WHERE guild_id=?",
+                (message.guild.id,),
+            )
+        ).fetchone()
+        if prefix_enabled and bool(prefix_enabled["prefix_enabled"]) is False:
+            return ""
+
+        return prefix["prefix"] if prefix else ""
     except Exception:
-        return default_prefix
+        return ""
 
 
 async def cleanup_cache():
@@ -252,11 +259,14 @@ async def database() -> aiosqlite.Connection:
 # command configs
 data = get_global_config()
 version = open("VERSION").read()
-
+if not version:
+    logger.error(
+        "something went wrong -- can't load version, please make sure a VERSION file exists"
+    )
+    exit()
 # used to determine testing modules etc.
 release = not version.endswith("alpha")
-if not version:
-    logger.error("something went wrong -- can't load version")
+
 # bot definitions
 intents = discord.Intents.all()
 
@@ -326,81 +336,12 @@ TOKEN = cast(str, os.getenv("CLIENT_TOKEN"))
 GLOBAL_REGEN_PASSWORD = os.getenv("GLOBAL_REGEN_PASSWORD")
 
 
-# events
-def verify_dec():
-    """
-    Checks for certain things that could prevent a command from sending
-    """
-
-    async def predicate(ctx: commands.Context):
-        if ctx.guild is None:
-            return True
-        cur: aiosqlite.Cursor = await ctx.bot.db.cursor()
-        row = await (
-            await cur.execute(
-                "SELECT prefix_enabled FROM guilds WHERE guild_id=?", (ctx.guild.id,)
-            )
-        ).fetchone()
-
-        prefix_enabled = bool(row[0]) if row else False
-
-        if prefix_enabled is None:
-            prefix_enabled = False
-
-        if ctx.interaction is not None:
-            return True
-
-        return prefix_enabled
-
-    return commands.check(predicate)
-
-
-def recursive_update(existing_config, template_config):
-    def merge(d1, d2):
-        result = d1.copy()
-        for key, value in d2.items():
-            if (
-                key in result
-                and isinstance(result[key], dict)
-                and isinstance(value, dict)
-            ):
-                result[key] = merge(result[key], value)
-            else:
-                result.setdefault(key, value)
-        return result
-
-    return merge(existing_config, template_config)
-
-
-async def verify(ctx) -> bool:
-    if ctx.guild is None:
-        return True
-    cur: aiosqlite.Cursor = await ctx.bot.db.cursor()
-    row = await (
-        await cur.execute(
-            "SELECT prefix_enabled FROM guilds WHERE guild_id=?", (ctx.guild.id,)
-        )
-    ).fetchone()
-
-    prefix_enabled = bool(row[0]) if row else False
-
-    if prefix_enabled is None:
-        prefix_enabled = False
-
-    if ctx.interaction is not None:
-        return True
-
-    return prefix_enabled
-
-
 @client.event
 async def on_command(ctx: commands.Context):
     if not ctx.interaction:
         async with ctx.typing():
             await asyncio.sleep(2.5)
     command = cast(commands.Command, ctx.command)
-    if not await verify(ctx):
-        return False
     logger.info(
         f"{command.qualified_name} has been used by {ctx.author.global_name} ({ctx.author.id})!"
     )
@@ -418,36 +359,12 @@ async def on_command(ctx: commands.Context):
 #     )
 
 
-async def update_guild_modules(
-    con: aiosqlite.Connection,
-    guild_id,
-    bot: Codygen,
-    current_settings: dict,
-) -> dict:
-    modules = bot.cogs
-    for module in modules.keys():
-        if bot.module(module).hidden:
-            continue
-        if module not in current_settings.keys():
-            current_settings[module] = DEFAULT_MODULE_STATE
-            if DEFAULT_MODULE_OVERRIDE.get(module):
-                current_settings[module] = DEFAULT_MODULE_OVERRIDE[module]
-    settings_str = json.dumps(current_settings, indent=4)
-    await con.execute(
-        "UPDATE guilds SET module_settings=? WHERE guild_id=?",
-        (
-            settings_str,
-            guild_id,
-        ),
-    )
-    await con.commit()
-    return current_settings
-
-
 # TODO CUSTOM PERMISSION CHECK (so it can be customized with roles users etc not just permissions)
 # what the fuck did i mean by that
 @client.check
 async def is_module_enabled(ctx: commands.Context):
+
+    # exceptions
     if ctx.guild is None:
         logger.debug("allowing command: case 1")
         return True
@@ -467,24 +384,57 @@ async def is_module_enabled(ctx: commands.Context):
         return True
     if getattr(ctx.cog, "hidden", False):
         return True
-    con: aiosqlite.Connection = ctx.bot.db
-    cur: aiosqlite.Cursor = await con.cursor()
+    # ---
+
+    db: aiosqlite.Connection = ctx.bot.db
     logger.debug(f"cog: {ctx.cog.qualified_name}")
-    res = await cur.execute(
-        "SELECT module_settings FROM guilds WHERE guild_id=?",
-        (ctx.guild.id,),
-    )
-    row = await res.fetchone()
-    settings = json.loads(row[0]) if row and row[0] else {}
-    is_enabled = settings.get(ctx.cog.qualified_name.lower(), None)
-    if is_enabled is None:
-        is_enabled = DEFAULT_MODULE_STATE
-        await update_guild_modules(con, ctx.guild.id, client, settings)
+
+    res = await (
+        await db.execute(
+            f"SELECT {ctx.cog.__cog_name__} FROM modules WHERE guild_id=?",
+            (ctx.guild.id,),
+        )
+    ).fetchone()
+
+    module = cast(Module, ctx.cog)
+
+    if not res:
+        is_enabled = True if module.hidden is True else module.default
+    else:
+        is_enabled = bool(res[0])
 
     if is_enabled is False:
         await ctx.reply(
             view=Message(
                 f"this command comes from a disabled module.\n-# `{ctx.cog.__cog_name__}`",
+                accent_color=Color.negative,
+            ),
+            ephemeral=True,
+        )
+        return False
+    return True
+
+
+@client.check
+async def is_initialized(ctx: commands.Context):
+    if not ctx.guild:
+        return True
+    if (
+        ctx.command.__getattribute__("name") == "init"
+        and ctx.command.__getattribute__("full_parent_name") == "settings"
+    ):
+        return True
+    res = await (
+        await ctx.bot.db.execute(
+            "SELECT 1 FROM guilds WHERE guild_id=?",
+            (ctx.guild.id,),
+        )
+    ).fetchone()
+    if not res:
+        logger.warning(f"{ctx.guild.id} has not initialized the bot yet!")
+        await ctx.reply(
+            view=Message(
+                f"# {ctx.bot.emote('failure')} it looks like the bot hasn't been initialized yet.\n> ### **what does this mean?**\n> the bot failed to set up in this server. this can happen when the bot gets added while it's offline\n> ### **what can i do about this?**\n> ask an administrator to run the /settings init command",
                 accent_color=Color.negative,
             ),
             ephemeral=True,
@@ -679,6 +629,22 @@ async def on_ready():
         )
         await ctx.reply(view=e, ephemeral=True, mention_author=False)
 
+    global_modules_res = await (
+        await client.db.execute("SELECT name FROM pragma_table_info('modules');")
+    ).fetchall()
+    global_module_names = [
+        m["name"] for m in global_modules_res if m["name"] != "guild_id"
+    ]
+    moduleerror = False
+    for cog in client.cogs.keys():
+        if cog not in global_module_names:
+            moduleerror = True
+            logger.error(
+                f"{cog} was not found in the modules table. please modify the table so it includes this module"
+            )
+    if moduleerror:
+        logger.warning("module errors occured, aborting load...")
+        exit()
     client.ready = True
 
 

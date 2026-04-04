@@ -44,7 +44,9 @@ class settings(Module):
     @commands.has_guild_permissions(administrator=True)
     @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @commands.hybrid_group(
-        name="settings", description="settings to manage your bot instance."
+        name="settings",
+        description="settings to manage your bot instance.",
+        with_app_command=True,
     )
     async def settings(self, ctx: commands.Context):
         pass
@@ -53,7 +55,7 @@ class settings(Module):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @commands.has_permissions(administrator=True)
-    @settings.group(name="modules", description="manage the server's modules")
+    @settings.command(name="modules", description="manage the server's modules")
     async def modules(self, ctx: commands.Context):
         if not ctx.guild:
             return
@@ -62,29 +64,36 @@ class settings(Module):
             view=Message(f"{ctx.bot.emote('loading')} loading modules..."),
             ephemeral=True,
         )
-        res = await (
-            await db.execute(
-                "SELECT module_settings FROM guilds WHERE guild_id=?", (ctx.guild.id,)
-            )
-        ).fetchone()
-        if not res or res[0] == "{}":
-            bot = cast(Codygen, self.bot)
-            all_modules = bot.cogs
-            base_modules = {
-                k: v
-                for k, v in all_modules.items()
-                if not v.hidden and k != self.__cog_name__
-            }
-            settings = {m: DEFAULT_MODULE_STATE for m in base_modules.keys()}
-            logger.debug(f"after processing: {all_modules} {base_modules} {settings}")
-            await db.execute(
-                "UPDATE guilds SET module_settings=? WHERE guild_id=?",
-                (json.dumps(settings, indent=4), ctx.guild.id),
-            )
 
-            await db.commit()
+        global_modules_res = await (
+            await db.execute("SELECT name FROM pragma_table_info('modules');")
+        ).fetchall()
+        global_module_names = [
+            m["name"] for m in global_modules_res if m["name"] != "guild_id"
+        ]
+        global_modules = [ctx.bot.get_cog(m) for m in global_module_names]
+
+        # this gets the currently enabled modules for that guild
+        res = await (
+            await db.execute("SELECT * FROM modules WHERE guild_id=?", (ctx.guild.id,))
+        ).fetchone()
+        if not res:
+            settings = {}
+            for module in global_modules:
+                module = cast(Module, module)
+                if module.hidden is True:
+                    continue
+                settings[module.__cog_name__] = module.default
         else:
-            settings = json.loads(res[0])
+            settings = {}
+            for module in global_modules:
+                module = cast(Module, module)
+                if module.hidden is True:
+                    continue
+
+                settings[module.__cog_name__] = bool(res[module.__cog_name__])
+
+        logger.debug(res)
         await msg.edit(
             view=SettingsModulesLayout(self.bot, settings, ctx.author.id), content=""
         )
@@ -127,7 +136,8 @@ class settings(Module):
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.describe(prefix="The new prefix to set")
     @settings.command(
-        name="prefix", description="view the current prefix and change it."
+        name="prefix",
+        description="view the current prefix and change it.",
     )
     async def prefix(self, ctx: commands.Context, prefix: str | None = None):
         if not ctx.guild:
@@ -136,7 +146,7 @@ class settings(Module):
         con: aiosqlite.Connection = self.bot.db
         cur: aiosqlite.Cursor = await con.cursor()
         e = Message(
-            f"# prefix\nthe current prefix in this server is: `{old}`",
+            f"# prefix\n{f'the current prefix in this server is: `{old}`' if old else 'there is no prefix set.'}",
             accent_color=Color.white,
         )
         e2 = Message(
@@ -151,18 +161,29 @@ class settings(Module):
         await cur.execute(
             "UPDATE guilds SET prefix = ? WHERE guild_id = ?", (prefix, ctx.guild.id)
         )
-        if cur.rowcount == 0:
-            await ctx.reply(
-                view=Message(
-                    "something went wrong!\n-# are you sure the server is initialized?",
-                    accent_color=Color.negative,
-                ),
-                mention_author=False,
-            )
-            return
-
+        await cur.execute(
+            "UPDATE guilds SET prefix_enabled = 1 WHERE guild_id = ?",
+            (ctx.guild.id,),
+        )
         await con.commit()
         await ctx.reply(view=e2)
+
+    @commands.has_guild_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
+    @settings.command(name="remove_prefix", description="remove the current prefix")
+    async def remove_prefix(self, ctx: commands.Context):
+        if not ctx.guild:
+            return
+        await self.bot.db.execute(
+            "UPDATE guilds SET prefix_enabled = 0 WHERE guild_id = ?",
+            (ctx.guild.id,),
+        )
+        await self.bot.db.commit()
+        await ctx.reply(
+            view=Message(
+                "# prefix successfully disabled.\n- use /settings prefix to enable it again"
+            )
+        )
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild):

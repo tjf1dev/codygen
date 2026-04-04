@@ -11,6 +11,12 @@ async def get_commands(token: str, client_id: str | int) -> List[Dict[str, Any]]
     return cast(List[Dict[str, Any]], await get_command(token, client_id, name="*"))
 
 
+def get_command_id_by_full_name(bot: Codygen, full_name: str) -> str | None:
+    return next(
+        (c["id"] for c in bot.parsed_commands if c["full_name"] == full_name), None
+    )
+
+
 async def get_command(
     token: str, client_id: str | int, id: int = 0, name: str = "", full_name: str = ""
 ) -> Dict | List[Dict[str, Any]]:
